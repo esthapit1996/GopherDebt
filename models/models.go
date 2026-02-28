@@ -53,7 +53,7 @@ type GroupWithBalance struct {
 // CreateGroupRequest is the payload for creating a new group
 type CreateGroupRequest struct {
 	Name        string `json:"name" binding:"required"`
-	Description string `json:"description"`
+	Description string `json:"description" binding:"max=128"`
 	Emoji       string `json:"emoji"`
 }
 

@@ -80,6 +80,11 @@ func GetGroupExpenses(db *sql.DB, groupID int) ([]models.Expense, error) {
 			return nil, err
 		}
 		expense.PaidByUser = &payer
+		// Fetch splits for this expense
+		splits, err := GetExpenseSplits(db, expense.ID)
+		if err == nil {
+			expense.Splits = splits
+		}
 		expenses = append(expenses, expense)
 	}
 	return expenses, rows.Err()
