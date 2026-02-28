@@ -56,6 +56,10 @@ func (h *SettlementHandler) CreateSettlement(c *gin.Context) {
 		return
 	}
 
+	// Log activity
+	amount := req.Amount
+	db.LogActivity(h.DB, groupID, userID, db.ActivitySettlement, "Settled up", &amount, &req.PaidTo)
+
 	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Message: "Settlement recorded successfully", Data: settlement})
 }
 

@@ -18,7 +18,11 @@ func main() {
 	// Database connection
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
-		connStr = "postgresql://postgres.rbcewoduprlgwydffiyz:Ganzgenau12345*@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
+		dbPassword := os.Getenv("DB_PASSWORD")
+		if dbPassword == "" {
+			log.Fatal("DB_PASSWORD environment variable is required")
+		}
+		connStr = fmt.Sprintf("host=aws-1-eu-west-1.pooler.supabase.com port=5432 user=postgres.rbcewoduprlgwydffiyz password=%s dbname=postgres sslmode=require", dbPassword)
 	}
 
 	database, err := sql.Open("postgres", connStr)
@@ -43,9 +47,47 @@ func main() {
 	groupHandler := handlers.NewGroupHandler(database)
 	expenseHandler := handlers.NewExpenseHandler(database)
 	settlementHandler := handlers.NewSettlementHandler(database)
+	expensePaymentHandler := handlers.NewExpensePaymentHandler(database)
+	activityHandler := handlers.NewActivityHandler(database)
 
 	// Setup router
 	r := gin.Default()
+
+	// CORS middleware and cache prevention
+	r.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, Cache-Control")
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
+
+	// Root endpoint
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"name":    "GopherDebt API",
+			"version": "1.0.0",
+			"status":  "running",
+			"endpoints": gin.H{
+				"health":   "GET /health",
+				"register": "POST /api/register",
+				"login":    "POST /api/login",
+				"docs":     "See /api/* for protected endpoints",
+			},
+		})
+	})
+
+	// Admin: Reset all financial data (keep users and groups)
+	r.POST("/admin/reset-finances", func(c *gin.Context) {
+		database.Exec("TRUNCATE settlements, expense_payments, expense_splits, expenses RESTART IDENTITY CASCADE")
+		c.JSON(200, gin.H{"message": "All expenses, payments, and settlements cleared"})
+	})
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
@@ -63,6 +105,10 @@ func main() {
 		// User routes
 		api.GET("/profile", userHandler.GetProfile)
 		api.GET("/users", userHandler.GetAllUsers)
+		api.GET("/debt-overview", userHandler.GetDebtOverview)
+		api.GET("/payment-history", userHandler.GetPaymentHistory)
+		api.DELETE("/payment-history", userHandler.ClearPaymentHistory)
+		api.PUT("/profile/theme", userHandler.UpdateTheme)
 
 		// Group routes
 		api.POST("/groups", groupHandler.CreateGroup)
@@ -78,6 +124,12 @@ func main() {
 		api.GET("/groups/:id/expenses/:expenseID", expenseHandler.GetExpense)
 		api.DELETE("/groups/:id/expenses/:expenseID", expenseHandler.DeleteExpense)
 
+		// Expense payment routes (partial repayments)
+		api.POST("/expenses/:expenseId/payments", expensePaymentHandler.CreateExpensePayment)
+		api.GET("/expenses/:expenseId/payments", expensePaymentHandler.GetExpensePayments)
+		api.DELETE("/payments/:paymentId", expensePaymentHandler.DeleteExpensePayment)
+		api.GET("/groups/:id/expense-payment-statuses", expensePaymentHandler.GetGroupExpensePaymentStatuses)
+
 		// Settlement routes
 		api.POST("/groups/:id/settlements", settlementHandler.CreateSettlement)
 		api.GET("/groups/:id/settlements", settlementHandler.GetGroupSettlements)
@@ -85,6 +137,9 @@ func main() {
 		// Balance routes
 		api.GET("/groups/:id/balances", settlementHandler.GetGroupBalances)
 		api.GET("/groups/:id/my-balance", settlementHandler.GetMyBalance)
+
+		// Activity routes
+		api.GET("/groups/:id/activities", activityHandler.GetGroupActivities)
 	}
 
 	// Start server

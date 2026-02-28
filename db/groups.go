@@ -6,18 +6,23 @@ import (
 	"gopherdebt/models"
 )
 
-func CreateGroup(db *sql.DB, name, description string, createdBy int) (*models.Group, error) {
+func CreateGroup(db *sql.DB, name, description, emoji string, createdBy int) (*models.Group, error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
+	// Default emoji if not provided
+	if emoji == "" {
+		emoji = "💰"
+	}
+
 	var group models.Group
 	err = tx.QueryRow(
-		`INSERT INTO groups (name, description, created_by) VALUES ($1, $2, $3) RETURNING id, name, description, created_by, created_at, updated_at`,
-		name, description, createdBy,
-	).Scan(&group.ID, &group.Name, &group.Description, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt)
+		`INSERT INTO groups (name, description, emoji, created_by) VALUES ($1, $2, $3, $4) RETURNING id, name, description, COALESCE(emoji, '💰'), created_by, created_at, updated_at`,
+		name, description, emoji, createdBy,
+	).Scan(&group.ID, &group.Name, &group.Description, &group.Emoji, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -38,9 +43,9 @@ func GetGroupByID(db *sql.DB, groupID int) (*models.Group, error) {
 	var description sql.NullString
 
 	err := db.QueryRow(
-		`SELECT id, name, description, created_by, created_at, updated_at FROM groups WHERE id = $1`,
+		`SELECT id, name, description, COALESCE(emoji, '💰'), created_by, created_at, updated_at FROM groups WHERE id = $1`,
 		groupID,
-	).Scan(&group.ID, &group.Name, &description, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt)
+	).Scan(&group.ID, &group.Name, &description, &group.Emoji, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -61,7 +66,7 @@ func GetGroupByID(db *sql.DB, groupID int) (*models.Group, error) {
 
 func GetUserGroups(db *sql.DB, userID int) ([]models.Group, error) {
 	rows, err := db.Query(
-		`SELECT g.id, g.name, g.description, g.created_by, g.created_at, g.updated_at
+		`SELECT g.id, g.name, g.description, COALESCE(g.emoji, '💰'), g.created_by, g.created_at, g.updated_at
 		 FROM groups g INNER JOIN group_members gm ON g.id = gm.group_id
 		 WHERE gm.user_id = $1 ORDER BY g.created_at DESC`,
 		userID,
@@ -75,7 +80,7 @@ func GetUserGroups(db *sql.DB, userID int) ([]models.Group, error) {
 	for rows.Next() {
 		var group models.Group
 		var description sql.NullString
-		if err := rows.Scan(&group.ID, &group.Name, &description, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt); err != nil {
+		if err := rows.Scan(&group.ID, &group.Name, &description, &group.Emoji, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if description.Valid {

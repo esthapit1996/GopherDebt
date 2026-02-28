@@ -6,20 +6,7 @@ import (
 )
 
 func RunMigrations(db *sql.DB) error {
-	// Drop existing tables to start fresh (remove in production!)
-	dropTables := []string{
-		`DROP TABLE IF EXISTS expense_splits CASCADE`,
-		`DROP TABLE IF EXISTS expenses CASCADE`,
-		`DROP TABLE IF EXISTS settlements CASCADE`,
-		`DROP TABLE IF EXISTS group_members CASCADE`,
-		`DROP TABLE IF EXISTS groups CASCADE`,
-		`DROP TABLE IF EXISTS users CASCADE`,
-	}
-
-	for _, drop := range dropTables {
-		db.Exec(drop)
-	}
-
+	// Tables are created if they don't exist - data persists across restarts
 	migrations := []string{
 		`CREATE TABLE IF NOT EXISTS users (
 			id SERIAL PRIMARY KEY,
@@ -69,11 +56,35 @@ func RunMigrations(db *sql.DB) error {
 			amount DECIMAL(10, 2) NOT NULL,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS expense_payments (
+			id SERIAL PRIMARY KEY,
+			expense_id INTEGER REFERENCES expenses(id) ON DELETE CASCADE,
+			paid_by INTEGER REFERENCES users(id),
+			amount DECIMAL(10, 2) NOT NULL,
+			note VARCHAR(255),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 		`CREATE INDEX IF NOT EXISTS idx_group_members_group_id ON group_members(group_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_group_members_user_id ON group_members(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_expenses_group_id ON expenses(group_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_expense_splits_expense_id ON expense_splits(expense_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_settlements_group_id ON settlements(group_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_expense_payments_expense_id ON expense_payments(expense_id)`,
+		`CREATE TABLE IF NOT EXISTS activity_log (
+			id SERIAL PRIMARY KEY,
+			group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
+			user_id INTEGER REFERENCES users(id),
+			action_type VARCHAR(50) NOT NULL,
+			description TEXT NOT NULL,
+			amount DECIMAL(10, 2),
+			related_user_id INTEGER REFERENCES users(id),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_activity_log_group_id ON activity_log(group_id)`,
+		// Add emoji column to groups table
+		`ALTER TABLE groups ADD COLUMN IF NOT EXISTS emoji VARCHAR(10) DEFAULT '💰'`,
+		// Add theme_preference column to users table
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT 'dark'`,
 	}
 
 	for i, migration := range migrations {

@@ -86,6 +86,35 @@ func CalculateGroupBalances(db *sql.DB, groupID int) ([]models.Balance, error) {
 		netBalances[s.PaidTo] -= s.Amount
 	}
 
+	// Factor in expense payments (partial repayments)
+	// When someone pays back their share of an expense, it's like a mini-settlement
+	paymentRows, err := db.Query(
+		`SELECT ep.paid_by, e.paid_by, ep.amount 
+		FROM expense_payments ep 
+		INNER JOIN expenses e ON ep.expense_id = e.id 
+		WHERE e.group_id = $1`,
+		groupID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer paymentRows.Close()
+
+	for paymentRows.Next() {
+		var paidBy, paidTo int
+		var amount float64
+		if err := paymentRows.Scan(&paidBy, &paidTo, &amount); err != nil {
+			return nil, err
+		}
+		// The person who made the payment increases their balance (they've paid back)
+		netBalances[paidBy] += amount
+		// The original payer receives this payment
+		netBalances[paidTo] -= amount
+	}
+	if err := paymentRows.Err(); err != nil {
+		return nil, err
+	}
+
 	var creditors []struct {
 		userID int
 		amount float64
@@ -183,5 +212,335 @@ func GetUserBalanceInGroup(db *sql.DB, groupID, userID int) (float64, error) {
 		balance -= settlementsReceived.Float64
 	}
 
+	// Factor in expense payments made by this user (payments they made to repay someone)
+	var paymentsMade sql.NullFloat64
+	err = db.QueryRow(
+		`SELECT COALESCE(SUM(ep.amount), 0) 
+		FROM expense_payments ep 
+		INNER JOIN expenses e ON ep.expense_id = e.id 
+		WHERE e.group_id = $1 AND ep.paid_by = $2`,
+		groupID, userID,
+	).Scan(&paymentsMade)
+	if err != nil {
+		return 0, err
+	}
+	if paymentsMade.Valid {
+		balance += paymentsMade.Float64
+	}
+
+	// Factor in expense payments received by this user (payments received as the original expense payer)
+	var paymentsReceived sql.NullFloat64
+	err = db.QueryRow(
+		`SELECT COALESCE(SUM(ep.amount), 0) 
+		FROM expense_payments ep 
+		INNER JOIN expenses e ON ep.expense_id = e.id 
+		WHERE e.group_id = $1 AND e.paid_by = $2`,
+		groupID, userID,
+	).Scan(&paymentsReceived)
+	if err != nil {
+		return 0, err
+	}
+	if paymentsReceived.Valid {
+		balance -= paymentsReceived.Float64
+	}
+
 	return balance, nil
+}
+
+// IsGroupSettled returns true if all balances in the group are 0
+func IsGroupSettled(db *sql.DB, groupID int) (bool, error) {
+	balances, err := CalculateGroupBalances(db, groupID)
+	if err != nil {
+		return false, err
+	}
+	return len(balances) == 0, nil
+}
+
+// DebtOverviewItem represents a debt relationship with another user
+type DebtOverviewItem struct {
+	User   *models.User `json:"user"`
+	Amount float64      `json:"amount"` // Positive = they owe you, Negative = you owe them
+}
+
+// GetDebtOverview calculates how much each user owes/is owed by the current user across all groups
+func GetDebtOverview(db *sql.DB, userID int) ([]DebtOverviewItem, error) {
+	// Get all groups the user is a member of
+	groups, err := GetUserGroups(db, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Map to accumulate net balances with each user
+	// Positive = they owe us, Negative = we owe them
+	userBalances := make(map[int]float64)
+	userMap := make(map[int]*models.User)
+
+	for _, group := range groups {
+		// Get all members of this group for userMap
+		members, err := GetGroupMembers(db, group.ID)
+		if err != nil {
+			continue
+		}
+		for i := range members {
+			if members[i].ID != userID {
+				userMap[members[i].ID] = &members[i]
+			}
+		}
+
+		// Calculate pairwise balances from expense splits
+		// When someone pays for an expense and we're part of the split, we owe them our share
+		rows, err := db.Query(
+			`SELECT e.paid_by, es.user_id, es.amount 
+			FROM expenses e 
+			INNER JOIN expense_splits es ON e.id = es.expense_id 
+			WHERE e.group_id = $1`,
+			group.ID,
+		)
+		if err != nil {
+			continue
+		}
+
+		for rows.Next() {
+			var paidBy, splitUser int
+			var amount float64
+			if err := rows.Scan(&paidBy, &splitUser, &amount); err != nil {
+				continue
+			}
+
+			// If we paid and someone else has a split, they owe us
+			if paidBy == userID && splitUser != userID {
+				userBalances[splitUser] += amount
+			}
+			// If someone else paid and we have a split, we owe them
+			if paidBy != userID && splitUser == userID {
+				userBalances[paidBy] -= amount
+			}
+		}
+		rows.Close()
+
+		// Factor in settlements
+		settlements, err := GetGroupSettlements(db, group.ID)
+		if err != nil {
+			continue
+		}
+		for _, s := range settlements {
+			// If we paid someone (settling our debt)
+			if s.PaidBy == userID && s.PaidTo != userID {
+				userBalances[s.PaidTo] += s.Amount // We paid them, so they owe us more (or we owe less)
+			}
+			// If someone paid us (settling their debt)
+			if s.PaidBy != userID && s.PaidTo == userID {
+				userBalances[s.PaidBy] -= s.Amount // They paid us, so they owe us less
+			}
+		}
+
+		// Factor in expense payments (partial repayments)
+		paymentRows, err := db.Query(
+			`SELECT ep.paid_by, e.paid_by as expense_payer, ep.amount 
+			FROM expense_payments ep 
+			INNER JOIN expenses e ON ep.expense_id = e.id 
+			WHERE e.group_id = $1`,
+			group.ID,
+		)
+		if err != nil {
+			continue
+		}
+
+		for paymentRows.Next() {
+			var paidBy, expensePayer int
+			var amount float64
+			if err := paymentRows.Scan(&paidBy, &expensePayer, &amount); err != nil {
+				continue
+			}
+
+			// If we made a payment to someone (paying back our share)
+			if paidBy == userID && expensePayer != userID {
+				userBalances[expensePayer] += amount // We paid them back
+			}
+			// If someone paid us back
+			if paidBy != userID && expensePayer == userID {
+				userBalances[paidBy] -= amount // They paid us back, they owe us less
+			}
+		}
+		paymentRows.Close()
+	}
+
+	// Convert to DebtOverviewItem slice, only include non-zero balances
+	var result []DebtOverviewItem
+	for uid, balance := range userBalances {
+		if balance > 0.01 || balance < -0.01 {
+			// Get user info if not already in map
+			if userMap[uid] == nil {
+				user, err := GetUserByID(db, uid)
+				if err == nil && user != nil {
+					userMap[uid] = user
+				}
+			}
+			// Only add if we have valid user info
+			if userMap[uid] != nil {
+				result = append(result, DebtOverviewItem{
+					User:   userMap[uid],
+					Amount: balance,
+				})
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// PaymentHistoryItem represents a payment in the user's history
+type PaymentHistoryItem struct {
+	ID          int          `json:"id"`
+	Type        string       `json:"type"` // "settlement" or "expense_payment"
+	OtherUser   *models.User `json:"other_user"`
+	Amount      float64      `json:"amount"`
+	IsPayer     bool         `json:"is_payer"` // true if current user paid, false if received
+	GroupName   string       `json:"group_name"`
+	Description string       `json:"description,omitempty"`
+	CreatedAt   string       `json:"created_at"`
+}
+
+// GetPaymentHistory returns all settlements and expense payments for a user
+func GetPaymentHistory(db *sql.DB, userID int) ([]PaymentHistoryItem, error) {
+	var history []PaymentHistoryItem
+
+	// Get settlements where user is payer or receiver
+	rows, err := db.Query(
+		`SELECT s.id, s.paid_by, s.paid_to, s.amount, s.created_at, g.name as group_name,
+			u_payer.id, u_payer.email, u_payer.name, u_payer.created_at,
+			u_receiver.id, u_receiver.email, u_receiver.name, u_receiver.created_at
+		FROM settlements s
+		JOIN groups g ON s.group_id = g.id
+		JOIN users u_payer ON s.paid_by = u_payer.id
+		JOIN users u_receiver ON s.paid_to = u_receiver.id
+		WHERE s.paid_by = $1 OR s.paid_to = $1
+		ORDER BY s.created_at DESC`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id, payerID, receiverID int
+		var amount float64
+		var createdAt, groupName string
+		var payer, receiver models.User
+
+		if err := rows.Scan(
+			&id, &payerID, &receiverID, &amount, &createdAt, &groupName,
+			&payer.ID, &payer.Email, &payer.Name, &payer.CreatedAt,
+			&receiver.ID, &receiver.Email, &receiver.Name, &receiver.CreatedAt,
+		); err != nil {
+			continue
+		}
+
+		isPayer := payerID == userID
+		var otherUser *models.User
+		if isPayer {
+			otherUser = &receiver
+		} else {
+			otherUser = &payer
+		}
+
+		history = append(history, PaymentHistoryItem{
+			ID:          id,
+			Type:        "settlement",
+			OtherUser:   otherUser,
+			Amount:      amount,
+			IsPayer:     isPayer,
+			GroupName:   groupName,
+			Description: "Settlement",
+			CreatedAt:   createdAt,
+		})
+	}
+
+	// Get expense payments where user is payer or the expense owner
+	paymentRows, err := db.Query(
+		`SELECT ep.id, ep.paid_by, e.paid_by as expense_owner, ep.amount, ep.created_at, g.name as group_name, e.description,
+			u_payer.id, u_payer.email, u_payer.name, u_payer.created_at,
+			u_owner.id, u_owner.email, u_owner.name, u_owner.created_at
+		FROM expense_payments ep
+		JOIN expenses e ON ep.expense_id = e.id
+		JOIN groups g ON e.group_id = g.id
+		JOIN users u_payer ON ep.paid_by = u_payer.id
+		JOIN users u_owner ON e.paid_by = u_owner.id
+		WHERE ep.paid_by = $1 OR e.paid_by = $1
+		ORDER BY ep.created_at DESC`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer paymentRows.Close()
+
+	for paymentRows.Next() {
+		var id, payerID, ownerID int
+		var amount float64
+		var createdAt, groupName, description string
+		var payer, owner models.User
+
+		if err := paymentRows.Scan(
+			&id, &payerID, &ownerID, &amount, &createdAt, &groupName, &description,
+			&payer.ID, &payer.Email, &payer.Name, &payer.CreatedAt,
+			&owner.ID, &owner.Email, &owner.Name, &owner.CreatedAt,
+		); err != nil {
+			continue
+		}
+
+		isPayer := payerID == userID
+		var otherUser *models.User
+		if isPayer {
+			otherUser = &owner
+		} else {
+			otherUser = &payer
+		}
+
+		history = append(history, PaymentHistoryItem{
+			ID:          id,
+			Type:        "expense_payment",
+			OtherUser:   otherUser,
+			Amount:      amount,
+			IsPayer:     isPayer,
+			GroupName:   groupName,
+			Description: description,
+			CreatedAt:   createdAt,
+		})
+	}
+
+	// Sort by created_at descending (most recent first)
+	// Simple bubble sort since list shouldn't be too large
+	for i := 0; i < len(history)-1; i++ {
+		for j := 0; j < len(history)-i-1; j++ {
+			if history[j].CreatedAt < history[j+1].CreatedAt {
+				history[j], history[j+1] = history[j+1], history[j]
+			}
+		}
+	}
+
+	// Limit to 250 most recent transactions to save database space
+	if len(history) > 250 {
+		history = history[:250]
+	}
+
+	return history, nil
+}
+
+// ClearPaymentHistory deletes all settlements and expense payments for a user
+func ClearPaymentHistory(db *sql.DB, userID int) error {
+	// Delete settlements where user is payer or receiver
+	_, err := db.Exec(`DELETE FROM settlements WHERE paid_by = $1 OR paid_to = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete expense payments where user is the payer
+	_, err = db.Exec(`DELETE FROM expense_payments WHERE paid_by = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

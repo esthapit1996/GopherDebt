@@ -4,12 +4,13 @@ import "time"
 
 // User represents a user in the system
 type User struct {
-	ID           int       `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"`
-	Name         string    `json:"name"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID              int       `json:"id"`
+	Email           string    `json:"email"`
+	PasswordHash    string    `json:"-"`
+	Name            string    `json:"name"`
+	ThemePreference string    `json:"theme_preference"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // CreateUserRequest is the payload for creating a new user
@@ -36,16 +37,24 @@ type Group struct {
 	ID          int       `json:"id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
+	Emoji       string    `json:"emoji"`
 	CreatedBy   int       `json:"created_by"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	Members     []User    `json:"members,omitempty"`
 }
 
+// GroupWithBalance includes the user's balance in the group
+type GroupWithBalance struct {
+	Group
+	MyBalance float64 `json:"my_balance"`
+}
+
 // CreateGroupRequest is the payload for creating a new group
 type CreateGroupRequest struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
+	Emoji       string `json:"emoji"`
 }
 
 // AddMemberRequest is the payload for adding a member to a group
@@ -100,6 +109,23 @@ type Settlement struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// ExpensePayment represents a partial payment towards an expense
+type ExpensePayment struct {
+	ID         int       `json:"id"`
+	ExpenseID  int       `json:"expense_id"`
+	PaidBy     int       `json:"paid_by"`
+	PaidByUser *User     `json:"paid_by_user,omitempty"`
+	Amount     float64   `json:"amount"`
+	Note       string    `json:"note,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// CreateExpensePaymentRequest is the payload for recording a payment on an expense
+type CreateExpensePaymentRequest struct {
+	Amount float64 `json:"amount" binding:"required,gt=0"`
+	Note   string  `json:"note"`
+}
+
 // CreateSettlementRequest is the payload for creating a settlement
 type CreateSettlementRequest struct {
 	PaidTo int     `json:"paid_to" binding:"required"`
@@ -123,6 +149,26 @@ type GroupBalance struct {
 type UserBalance struct {
 	User    *User   `json:"user"`
 	Balance float64 `json:"balance"`
+}
+
+// Activity represents a logged action in a group
+type Activity struct {
+	ID            int       `json:"id"`
+	GroupID       int       `json:"group_id"`
+	UserID        int       `json:"user_id"`
+	User          *User     `json:"user,omitempty"`
+	ActionType    string    `json:"action_type"`
+	Description   string    `json:"description"`
+	Amount        *float64  `json:"amount,omitempty"`
+	RelatedUserID *int      `json:"related_user_id,omitempty"`
+	RelatedUser   *User     `json:"related_user,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// ExpensePaymentStatus represents the payment status for an expense
+type ExpensePaymentStatus struct {
+	TotalOwed float64 `json:"total_owed"`
+	TotalPaid float64 `json:"total_paid"`
 }
 
 // APIResponse is a standard API response wrapper

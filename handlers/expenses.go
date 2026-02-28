@@ -104,6 +104,10 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 		return
 	}
 
+	// Log activity
+	amount := req.Amount
+	db.LogActivity(h.DB, groupID, userID, db.ActivityExpenseCreated, req.Description, &amount, nil)
+
 	expense, _ = db.GetExpenseByID(h.DB, expense.ID)
 	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Message: "Expense created successfully", Data: expense})
 }
@@ -199,8 +203,8 @@ func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
 		return
 	}
 
-	if expense.PaidBy != userID {
-		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the payer can delete the expense"})
+	if expense.GroupID != groupID {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Expense not found in this group"})
 		return
 	}
 
@@ -209,6 +213,9 @@ func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to delete expense"})
 		return
 	}
+
+	// Log activity
+	db.LogActivity(h.DB, groupID, userID, db.ActivityExpenseDeleted, expense.Description, &expense.Amount, nil)
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Expense deleted successfully"})
 }

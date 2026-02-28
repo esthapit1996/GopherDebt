@@ -1,0 +1,16 @@
+# Git
+.git
+.gitignore
+
+# Binary
+gopherdebt
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Misc
+README.md
+*.md
