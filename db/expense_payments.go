@@ -20,34 +20,36 @@ func CreateExpensePayment(db *sql.DB, expenseID, paidBy int, amount float64, not
 }
 
 // GetExpensePayments returns all payments for an expense
-func GetExpensePayments(db *sql.DB, expenseID int) ([]models.ExpensePayment, error) {
-	rows, err := db.Query(
-		`SELECT ep.id, ep.expense_id, ep.paid_by, ep.amount, COALESCE(ep.note, ''), ep.created_at,
-			u.id, u.email, u.name
-		FROM expense_payments ep
-		JOIN users u ON ep.paid_by = u.id
-		WHERE ep.expense_id = $1
-		ORDER BY ep.created_at DESC`,
-		expenseID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var payments []models.ExpensePayment
-	for rows.Next() {
-		var payment models.ExpensePayment
-		var user models.User
-		err := rows.Scan(&payment.ID, &payment.ExpenseID, &payment.PaidBy, &payment.Amount, &payment.Note, &payment.CreatedAt,
-			&user.ID, &user.Email, &user.Name)
+func GetExpensePayments(d *sql.DB, expenseID int) ([]models.ExpensePayment, error) {
+	return retry("GetExpensePayments", func() ([]models.ExpensePayment, error) {
+		rows, err := d.Query(
+			`SELECT ep.id, ep.expense_id, ep.paid_by, ep.amount, COALESCE(ep.note, ''), ep.created_at,
+				u.id, u.email, u.name
+			FROM expense_payments ep
+			JOIN users u ON ep.paid_by = u.id
+			WHERE ep.expense_id = $1
+			ORDER BY ep.created_at DESC`,
+			expenseID,
+		)
 		if err != nil {
 			return nil, err
 		}
-		payment.PaidByUser = &user
-		payments = append(payments, payment)
-	}
-	return payments, nil
+		defer rows.Close()
+
+		var payments []models.ExpensePayment
+		for rows.Next() {
+			var payment models.ExpensePayment
+			var user models.User
+			err := rows.Scan(&payment.ID, &payment.ExpenseID, &payment.PaidBy, &payment.Amount, &payment.Note, &payment.CreatedAt,
+				&user.ID, &user.Email, &user.Name)
+			if err != nil {
+				return nil, err
+			}
+			payment.PaidByUser = &user
+			payments = append(payments, payment)
+		}
+		return payments, nil
+	})
 }
 
 // GetTotalPaymentsForExpense returns the total amount paid towards an expense by a specific user
@@ -90,45 +92,49 @@ func DeleteExpensePayment(db *sql.DB, paymentID int) error {
 }
 
 // GetExpensePaymentByID returns a payment by ID
-func GetExpensePaymentByID(db *sql.DB, paymentID int) (*models.ExpensePayment, error) {
-	var payment models.ExpensePayment
-	err := db.QueryRow(
-		`SELECT id, expense_id, paid_by, amount, COALESCE(note, ''), created_at FROM expense_payments WHERE id = $1`,
-		paymentID,
-	).Scan(&payment.ID, &payment.ExpenseID, &payment.PaidBy, &payment.Amount, &payment.Note, &payment.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &payment, nil
+func GetExpensePaymentByID(d *sql.DB, paymentID int) (*models.ExpensePayment, error) {
+	return retry("GetExpensePaymentByID", func() (*models.ExpensePayment, error) {
+		var payment models.ExpensePayment
+		err := d.QueryRow(
+			`SELECT id, expense_id, paid_by, amount, COALESCE(note, ''), created_at FROM expense_payments WHERE id = $1`,
+			paymentID,
+		).Scan(&payment.ID, &payment.ExpenseID, &payment.PaidBy, &payment.Amount, &payment.Note, &payment.CreatedAt)
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		return &payment, nil
+	})
 }
 
 // GetGroupExpensePaymentStatuses returns payment status for all expenses in a group in one query
-func GetGroupExpensePaymentStatuses(db *sql.DB, groupID int) (map[int]models.ExpensePaymentStatus, error) {
-	// Single query to get: expense_id, total_owed (from splits excluding payer), total_paid
-	rows, err := db.Query(`
-		SELECT 
-			e.id as expense_id,
-			COALESCE((SELECT SUM(es.amount) FROM expense_splits es WHERE es.expense_id = e.id AND es.user_id != e.paid_by), 0) as total_owed,
-			COALESCE((SELECT SUM(ep.amount) FROM expense_payments ep WHERE ep.expense_id = e.id), 0) as total_paid
-		FROM expenses e
-		WHERE e.group_id = $1
-	`, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	statuses := make(map[int]models.ExpensePaymentStatus)
-	for rows.Next() {
-		var expenseID int
-		var status models.ExpensePaymentStatus
-		if err := rows.Scan(&expenseID, &status.TotalOwed, &status.TotalPaid); err != nil {
+func GetGroupExpensePaymentStatuses(d *sql.DB, groupID int) (map[int]models.ExpensePaymentStatus, error) {
+	return retry("GetGroupExpensePaymentStatuses", func() (map[int]models.ExpensePaymentStatus, error) {
+		// Single query to get: expense_id, total_owed (from splits excluding payer), total_paid
+		rows, err := d.Query(`
+			SELECT 
+				e.id as expense_id,
+				COALESCE((SELECT SUM(es.amount) FROM expense_splits es WHERE es.expense_id = e.id AND es.user_id != e.paid_by), 0) as total_owed,
+				COALESCE((SELECT SUM(ep.amount) FROM expense_payments ep WHERE ep.expense_id = e.id), 0) as total_paid
+			FROM expenses e
+			WHERE e.group_id = $1
+		`, groupID)
+		if err != nil {
 			return nil, err
 		}
-		statuses[expenseID] = status
-	}
-	return statuses, rows.Err()
+		defer rows.Close()
+
+		statuses := make(map[int]models.ExpensePaymentStatus)
+		for rows.Next() {
+			var expenseID int
+			var status models.ExpensePaymentStatus
+			if err := rows.Scan(&expenseID, &status.TotalOwed, &status.TotalPaid); err != nil {
+				return nil, err
+			}
+			statuses[expenseID] = status
+		}
+		return statuses, rows.Err()
+	})
 }
