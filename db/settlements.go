@@ -300,23 +300,25 @@ func GetDebtOverview(db *sql.DB, userID int) ([]DebtOverviewItem, error) {
 			continue
 		}
 
-		for rows.Next() {
-			var paidBy, splitUser int
-			var amount float64
-			if err := rows.Scan(&paidBy, &splitUser, &amount); err != nil {
-				continue
-			}
+		func() {
+			defer rows.Close()
+			for rows.Next() {
+				var paidBy, splitUser int
+				var amount float64
+				if err := rows.Scan(&paidBy, &splitUser, &amount); err != nil {
+					continue
+				}
 
-			// If we paid and someone else has a split, they owe us
-			if paidBy == userID && splitUser != userID {
-				userBalances[splitUser] += amount
+				// If we paid and someone else has a split, they owe us
+				if paidBy == userID && splitUser != userID {
+					userBalances[splitUser] += amount
+				}
+				// If someone else paid and we have a split, we owe them
+				if paidBy != userID && splitUser == userID {
+					userBalances[paidBy] -= amount
+				}
 			}
-			// If someone else paid and we have a split, we owe them
-			if paidBy != userID && splitUser == userID {
-				userBalances[paidBy] -= amount
-			}
-		}
-		rows.Close()
+		}()
 
 		// Factor in settlements
 		settlements, err := GetGroupSettlements(db, group.ID)
@@ -346,23 +348,25 @@ func GetDebtOverview(db *sql.DB, userID int) ([]DebtOverviewItem, error) {
 			continue
 		}
 
-		for paymentRows.Next() {
-			var paidBy, expensePayer int
-			var amount float64
-			if err := paymentRows.Scan(&paidBy, &expensePayer, &amount); err != nil {
-				continue
-			}
+		func() {
+			defer paymentRows.Close()
+			for paymentRows.Next() {
+				var paidBy, expensePayer int
+				var amount float64
+				if err := paymentRows.Scan(&paidBy, &expensePayer, &amount); err != nil {
+					continue
+				}
 
-			// If we made a payment to someone (paying back our share)
-			if paidBy == userID && expensePayer != userID {
-				userBalances[expensePayer] += amount // We paid them back
+				// If we made a payment to someone (paying back our share)
+				if paidBy == userID && expensePayer != userID {
+					userBalances[expensePayer] += amount // We paid them back
+				}
+				// If someone paid us back
+				if paidBy != userID && expensePayer == userID {
+					userBalances[paidBy] -= amount // They paid us back, they owe us less
+				}
 			}
-			// If someone paid us back
-			if paidBy != userID && expensePayer == userID {
-				userBalances[paidBy] -= amount // They paid us back, they owe us less
-			}
-		}
-		paymentRows.Close()
+		}()
 	}
 
 	// Convert to DebtOverviewItem slice, only include non-zero balances

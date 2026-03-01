@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
@@ -30,6 +31,12 @@ func main() {
 		log.Fatal("Error opening database:", err)
 	}
 	defer database.Close()
+
+	// Connection pool settings to prevent stale connections on Supabase/Render
+	database.SetMaxOpenConns(10)
+	database.SetMaxIdleConns(5)
+	database.SetConnMaxLifetime(5 * time.Minute)
+	database.SetConnMaxIdleTime(1 * time.Minute)
 
 	// Test connection
 	if err := database.Ping(); err != nil {
@@ -92,8 +99,12 @@ func main() {
 		c.JSON(200, gin.H{"message": "All expenses, payments, and settlements cleared"})
 	})
 
-	// Health check
+	// Health check — actually ping DB so we detect stale connections
 	r.GET("/health", func(c *gin.Context) {
+		if err := database.Ping(); err != nil {
+			c.JSON(503, gin.H{"status": "unhealthy", "error": err.Error()})
+			return
+		}
 		c.JSON(200, gin.H{"status": "healthy"})
 	})
 
