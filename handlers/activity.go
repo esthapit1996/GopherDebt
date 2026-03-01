@@ -31,7 +31,12 @@ func (h *ActivityHandler) GetGroupActivities(c *gin.Context) {
 
 	// Verify user is a member of the group
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR GetGroupActivities: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}

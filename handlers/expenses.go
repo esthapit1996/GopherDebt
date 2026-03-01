@@ -29,7 +29,12 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR CreateExpense: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -93,7 +98,12 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 	}
 
 	for _, split := range splits {
-		isMember, _ := db.IsGroupMember(h.DB, groupID, split.UserID)
+		isMember, err := db.IsGroupMember(h.DB, groupID, split.UserID)
+		if err != nil {
+			log.Printf("ERROR CreateExpense: IsGroupMember split user %d, group %d: %v", split.UserID, groupID, err)
+			c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify split member"})
+			return
+		}
 		if !isMember {
 			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "All users in split must be group members"})
 			return
@@ -124,7 +134,12 @@ func (h *ExpenseHandler) GetGroupExpenses(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR GetGroupExpenses: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -154,7 +169,12 @@ func (h *ExpenseHandler) GetExpense(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR GetExpense: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -193,7 +213,12 @@ func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR DeleteExpense: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}

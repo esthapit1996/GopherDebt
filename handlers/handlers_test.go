@@ -21,47 +21,63 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-const testSecret = "handler-test-secret"
+const testJWTSecret = "test-jwt-secret-for-handlers"
 
-func testToken(uid int) string {
+func generateTestToken(userID int) string {
 	claims := jwt.MapClaims{
-		"user_id": uid,
+		"user_id": userID,
 		"exp":     time.Now().Add(time.Hour).Unix(),
 		"iat":     time.Now().Unix(),
 	}
-	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	s, _ := t.SignedString([]byte(testSecret))
-	return s
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, _ := token.SignedString([]byte(testJWTSecret))
+	return signed
 }
 
-func setup() {
-	os.Setenv("JWT_SECRET", testSecret)
+// helper matching the real handler pattern
+func parseGroupID(id string) (int, error) {
+	return strconv.Atoi(id)
 }
 
-func teardown() {
-	os.Unsetenv("JWT_SECRET")
-}
-
-// --- Login ---
+// --- Login validation tests ---
 
 func TestLogin_EmptyBody(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	r.POST("/api/login", func(c *gin.Context) {
 		var req models.LoginRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(200, models.APIResponse{Success: true})
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
 	})
-
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/login", nil)
+	req, _ := http.NewRequest("POST", "/api/login", bytes.NewBuffer([]byte{}))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty body, got %d", w.Code)
+	}
+}
 
-	if w.Code != 400 {
-		t.Fatalf("want 400, got %d", w.Code)
+func TestLogin_InvalidJSON(t *testing.T) {
+	r := gin.New()
+	r.POST("/api/login", func(c *gin.Context) {
+		var req models.LoginRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/login", bytes.NewBuffer([]byte("not json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid JSON, got %d", w.Code)
 	}
 }
 
@@ -70,46 +86,44 @@ func TestLogin_MissingEmail(t *testing.T) {
 	r.POST("/api/login", func(c *gin.Context) {
 		var req models.LoginRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(200, models.APIResponse{Success: true})
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
 	})
-
-	body, _ := json.Marshal(map[string]string{"password": "abc123"})
 	w := httptest.NewRecorder()
+	body, _ := json.Marshal(map[string]string{"password": "test123"})
 	req, _ := http.NewRequest("POST", "/api/login", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing email, got %d", w.Code)
 	}
 }
 
-// --- Register ---
+// --- Register validation tests ---
 
 func TestRegister_ShortPassword(t *testing.T) {
 	r := gin.New()
 	r.POST("/api/register", func(c *gin.Context) {
 		var req models.CreateUserRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(200, models.APIResponse{Success: true})
-	})
-
-	body, _ := json.Marshal(map[string]string{
-		"email": "a@b.com", "password": "123", "name": "X",
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
 	})
 	w := httptest.NewRecorder()
+	body, _ := json.Marshal(map[string]string{
+		"email":    "test@test.com",
+		"password": "123",
+		"name":     "Test",
+	})
 	req, _ := http.NewRequest("POST", "/api/register", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for short password, got %d", w.Code)
 	}
 }
 
@@ -118,303 +132,291 @@ func TestRegister_InvalidEmail(t *testing.T) {
 	r.POST("/api/register", func(c *gin.Context) {
 		var req models.CreateUserRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(200, models.APIResponse{Success: true})
-	})
-
-	body, _ := json.Marshal(map[string]string{
-		"email": "notanemail", "password": "password1", "name": "X",
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
 	})
 	w := httptest.NewRecorder()
+	body, _ := json.Marshal(map[string]string{
+		"email":    "not-an-email",
+		"password": "password123",
+		"name":     "Test",
+	})
 	req, _ := http.NewRequest("POST", "/api/register", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid email, got %d", w.Code)
 	}
 }
 
-// --- Protected routes need auth ---
+// --- Protected route tests ---
 
-func TestProtected_NoAuth(t *testing.T) {
-	r := gin.New()
-	api := r.Group("/api")
-	api.Use(middleware.AuthMiddleware())
-	api.GET("/profile", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/profile", nil)
-	r.ServeHTTP(w, req)
-
-	if w.Code != 401 {
-		t.Fatalf("want 401, got %d", w.Code)
-	}
-}
-
-func TestProtected_WithAuth(t *testing.T) {
-	setup()
-	defer teardown()
-
+func TestProtectedRoute_NoAuth(t *testing.T) {
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.GET("/profile", func(c *gin.Context) {
-		c.JSON(200, gin.H{"user_id": c.GetInt("userID")})
+		c.JSON(200, gin.H{"ok": true})
 	})
-
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/profile", nil)
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
 	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("want 200, got %d", w.Code)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without auth, got %d", w.Code)
 	}
 }
 
-// --- Group creation validation ---
+func TestProtectedRoute_WithAuth(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
+	r := gin.New()
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware())
+	api.GET("/profile", func(c *gin.Context) {
+		userID := c.GetInt("userID")
+		c.JSON(200, gin.H{"user_id": userID})
+	})
+	token := generateTestToken(1)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/profile", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 with auth, got %d", w.Code)
+	}
+}
+
+// --- Group creation validation tests ---
 
 func TestCreateGroup_EmptyName(t *testing.T) {
-	setup()
-	defer teardown()
-
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.POST("/groups", func(c *gin.Context) {
 		var req models.CreateGroupRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(201, models.APIResponse{Success: true})
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
 	})
-
-	body, _ := json.Marshal(map[string]string{"name": ""})
+	token := generateTestToken(1)
 	w := httptest.NewRecorder()
+	body, _ := json.Marshal(map[string]string{"name": "", "description": "test"})
 	req, _ := http.NewRequest("POST", "/api/groups", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty group name, got %d", w.Code)
 	}
 }
 
 func TestCreateGroup_NameTooLong(t *testing.T) {
-	setup()
-	defer teardown()
-
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.POST("/groups", func(c *gin.Context) {
 		var req models.CreateGroupRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(201, models.APIResponse{Success: true})
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
 	})
-
-	long := make([]byte, 70)
-	for i := range long {
-		long[i] = 'x'
+	token := generateTestToken(1)
+	longName := make([]byte, 70)
+	for i := range longName {
+		longName[i] = 'a'
 	}
-	body, _ := json.Marshal(map[string]string{"name": string(long)})
+	body, _ := json.Marshal(map[string]string{"name": string(longName)})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/groups", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for name too long (70 chars > max 69), got %d", w.Code)
 	}
 }
 
-// --- Group ID parsing ---
+// --- Invalid group ID in URL ---
 
-func TestGroupID_Undefined(t *testing.T) {
-	setup()
-	defer teardown()
-
+func TestGroupEndpoint_InvalidGroupID(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.GET("/groups/:id", func(c *gin.Context) {
-		if _, err := strconv.Atoi(c.Param("id")); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: "Invalid group ID"})
+		_, err := parseGroupID(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid group ID"})
 			return
 		}
-		c.JSON(200, models.APIResponse{Success: true})
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
 	})
-
+	token := generateTestToken(1)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/groups/undefined", nil)
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400 for 'undefined', got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for 'undefined' group ID, got %d", w.Code)
 	}
 }
 
-func TestGroupID_NaN(t *testing.T) {
-	setup()
-	defer teardown()
-
+func TestGroupEndpoint_NaNGroupID(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.GET("/groups/:id", func(c *gin.Context) {
-		if _, err := strconv.Atoi(c.Param("id")); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: "Invalid group ID"})
+		_, err := parseGroupID(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid group ID"})
 			return
 		}
-		c.JSON(200, models.APIResponse{Success: true})
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
 	})
-
+	token := generateTestToken(1)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/groups/NaN", nil)
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400 for NaN, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for NaN group ID, got %d", w.Code)
 	}
 }
 
-// --- Settlement validation ---
+// --- Settlement validation tests ---
 
-func TestSettlement_MissingPaidTo(t *testing.T) {
-	setup()
-	defer teardown()
-
+func TestCreateSettlement_MissingFields(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.POST("/groups/:id/settlements", func(c *gin.Context) {
 		var req models.CreateSettlementRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(201, models.APIResponse{Success: true})
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
 	})
-
+	token := generateTestToken(1)
 	body, _ := json.Marshal(map[string]interface{}{"amount": 50.0})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/groups/1/settlements", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing paid_to, got %d", w.Code)
 	}
 }
 
-func TestSettlement_ZeroAmount(t *testing.T) {
-	setup()
-	defer teardown()
-
+func TestCreateSettlement_ZeroAmount(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.POST("/groups/:id/settlements", func(c *gin.Context) {
 		var req models.CreateSettlementRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(201, models.APIResponse{Success: true})
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
 	})
-
+	token := generateTestToken(1)
 	body, _ := json.Marshal(map[string]interface{}{"paid_to": 2, "amount": 0})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/groups/1/settlements", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for zero amount, got %d", w.Code)
 	}
 }
 
-// --- Expense validation ---
+// --- Expense validation tests ---
 
-func TestExpense_InvalidSplitType(t *testing.T) {
-	setup()
-	defer teardown()
-
+func TestCreateExpense_InvalidSplitType(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.POST("/groups/:id/expenses", func(c *gin.Context) {
 		var req models.CreateExpenseRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(201, models.APIResponse{Success: true})
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
 	})
-
+	token := generateTestToken(1)
 	body, _ := json.Marshal(map[string]interface{}{
-		"amount": 100, "description": "test", "split_type": "invalid",
+		"amount":      100,
+		"description": "Test",
+		"split_type":  "random",
 	})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/groups/1/expenses", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400 for invalid split_type, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid split_type, got %d", w.Code)
 	}
 }
 
-func TestExpense_NegativeAmount(t *testing.T) {
-	setup()
-	defer teardown()
-
+func TestCreateExpense_NegativeAmount(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.POST("/groups/:id/expenses", func(c *gin.Context) {
 		var req models.CreateExpenseRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(201, models.APIResponse{Success: true})
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
 	})
-
+	token := generateTestToken(1)
 	body, _ := json.Marshal(map[string]interface{}{
-		"amount": -50, "description": "test", "split_type": "equal",
+		"amount":      -50,
+		"description": "Test",
+		"split_type":  "equal",
 	})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/groups/1/expenses", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400 for negative amount, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for negative amount, got %d", w.Code)
 	}
 }
 
-// --- Theme validation ---
+// --- Theme validation tests ---
 
-func TestTheme_Invalid(t *testing.T) {
-	setup()
-	defer teardown()
-
+func TestUpdateTheme_InvalidTheme(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
@@ -423,37 +425,35 @@ func TestTheme_Invalid(t *testing.T) {
 			Theme string `json:"theme" binding:"required"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		valid := map[string]bool{
+		validThemes := map[string]bool{
 			"espresso": true, "dark": true, "dracula": true, "monokai": true,
 			"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true,
 			"lavender": true, "sakura": true, "solarized": true, "light": true,
 		}
-		if !valid[req.Theme] {
-			c.JSON(400, models.APIResponse{Success: false, Error: "Invalid theme"})
+		if !validThemes[req.Theme] {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid theme"})
 			return
 		}
-		c.JSON(200, models.APIResponse{Success: true})
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
 	})
-
+	token := generateTestToken(1)
 	body, _ := json.Marshal(map[string]string{"theme": "hacker"})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/api/profile/theme", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid theme, got %d", w.Code)
 	}
 }
 
-func TestTheme_Valid(t *testing.T) {
-	setup()
-	defer teardown()
-
+func TestUpdateTheme_ValidTheme(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
@@ -462,36 +462,35 @@ func TestTheme_Valid(t *testing.T) {
 			Theme string `json:"theme" binding:"required"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		valid := map[string]bool{
+		validThemes := map[string]bool{
 			"espresso": true, "dark": true, "dracula": true, "monokai": true,
 			"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true,
 			"lavender": true, "sakura": true, "solarized": true, "light": true,
 		}
-		if !valid[req.Theme] {
-			c.JSON(400, models.APIResponse{Success: false, Error: "Invalid theme"})
+		if !validThemes[req.Theme] {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid theme"})
 			return
 		}
-		c.JSON(200, models.APIResponse{Success: true})
+		c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Theme updated"})
 	})
-
-	body, _ := json.Marshal(map[string]string{"theme": "espresso"})
+	token := generateTestToken(1)
+	body, _ := json.Marshal(map[string]string{"theme": "dark"})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/api/profile/theme", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("want 200, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for valid theme, got %d", w.Code)
 	}
 }
 
-// --- CORS ---
+// --- CORS tests ---
 
-func TestCORS_Options(t *testing.T) {
+func TestCORS_OptionsRequest(t *testing.T) {
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -503,114 +502,131 @@ func TestCORS_Options(t *testing.T) {
 		}
 		c.Next()
 	})
-	r.GET("/t", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
-
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(200, gin.H{"ok": true})
+	})
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("OPTIONS", "/t", nil)
+	req, _ := http.NewRequest("OPTIONS", "/test", nil)
 	r.ServeHTTP(w, req)
-
 	if w.Code != 204 {
-		t.Fatalf("want 204, got %d", w.Code)
+		t.Errorf("expected 204 for OPTIONS, got %d", w.Code)
 	}
 	if w.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Fatal("missing CORS origin header")
+		t.Error("missing CORS header")
 	}
 }
 
-// --- APIResponse format ---
+// --- API Response format tests ---
 
-func TestAPIResponse_Success(t *testing.T) {
+func TestAPIResponseFormat(t *testing.T) {
 	r := gin.New()
-	r.GET("/t", func(c *gin.Context) {
-		c.JSON(200, models.APIResponse{Success: true, Data: gin.H{"hello": "world"}})
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(200, models.APIResponse{
+			Success: true,
+			Data:    map[string]string{"key": "value"},
+		})
 	})
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/t", nil)
+	req, _ := http.NewRequest("GET", "/test", nil)
 	r.ServeHTTP(w, req)
-
 	var resp models.APIResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to parse response as APIResponse: %v", err)
 	}
 	if !resp.Success {
-		t.Fatal("expected success=true")
+		t.Error("expected success: true")
+	}
+	if resp.Data == nil {
+		t.Error("expected non-nil data")
 	}
 }
 
-func TestAPIResponse_Error(t *testing.T) {
+func TestAPIResponseError(t *testing.T) {
 	r := gin.New()
-	r.GET("/t", func(c *gin.Context) {
-		c.JSON(500, models.APIResponse{Success: false, Error: "boom"})
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(500, models.APIResponse{
+			Success: false,
+			Error:   "Something broke",
+		})
 	})
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/t", nil)
+	req, _ := http.NewRequest("GET", "/test", nil)
 	r.ServeHTTP(w, req)
-
 	var resp models.APIResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.Success {
-		t.Fatal("expected success=false")
+		t.Error("expected success: false")
 	}
-	if resp.Error != "boom" {
-		t.Fatalf("want error 'boom', got %q", resp.Error)
+	if resp.Error != "Something broke" {
+		t.Errorf("expected error message, got %q", resp.Error)
 	}
 }
 
-// --- AddMember ---
+// --- Health endpoint test ---
 
-func TestAddMember_ZeroUserID(t *testing.T) {
-	setup()
-	defer teardown()
+func TestHealthEndpoint(t *testing.T) {
+	r := gin.New()
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "healthy"})
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/health", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
 
+// --- AddMember validation ---
+
+func TestAddMember_InvalidUserID(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
 	r := gin.New()
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.POST("/groups/:id/members", func(c *gin.Context) {
 		var req models.AddMemberRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 			return
 		}
-		c.JSON(200, models.APIResponse{Success: true})
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
 	})
-
+	token := generateTestToken(1)
 	body, _ := json.Marshal(map[string]interface{}{"user_id": 0})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/groups/1/members", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+testToken(1))
+	req.Header.Set("Authorization", "Bearer "+token)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Fatalf("want 400 for user_id=0, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for user_id=0, got %d", w.Code)
 	}
 }
 
-// --- JWT 7-day expiry ---
+// --- JWT expiry edge case ---
 
-func TestJWT_7DayToken(t *testing.T) {
-	setup()
-	defer teardown()
-
+func TestJWT_ExpiresAt7Days(t *testing.T) {
+	secret := "test-secret"
+	os.Setenv("JWT_SECRET", secret)
+	defer os.Unsetenv("JWT_SECRET")
 	claims := jwt.MapClaims{
 		"user_id": 1,
-		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(),
+		"exp":     time.Now().Add(time.Hour * 24 * 7).Unix(),
 		"iat":     time.Now().Unix(),
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	ts, _ := tok.SignedString([]byte(testSecret))
-
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString([]byte(secret))
 	r := gin.New()
-	r.GET("/t", middleware.AuthMiddleware(), func(c *gin.Context) {
+	r.GET("/test", middleware.AuthMiddleware(), func(c *gin.Context) {
 		c.JSON(200, gin.H{"ok": true})
 	})
-
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/t", nil)
-	req.Header.Set("Authorization", "Bearer "+ts)
+	req, _ := http.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
 	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("7-day token should work, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("7-day token should be valid, got %d", w.Code)
 	}
 }

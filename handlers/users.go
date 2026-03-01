@@ -109,9 +109,13 @@ func (h *UserHandler) Login(c *gin.Context) {
 func (h *UserHandler) GetProfile(c *gin.Context) {
 	userID := c.GetInt("userID")
 	user, err := db.GetUserByID(h.DB, userID)
+	if err == db.ErrNotFound {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "User not found"})
+		return
+	}
 	if err != nil {
 		log.Printf("ERROR GetProfile: GetUserByID failed for user %d: %v", userID, err)
-		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "User not found"})
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to load profile"})
 		return
 	}
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: user})

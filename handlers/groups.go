@@ -47,7 +47,12 @@ func (h *GroupHandler) GetGroup(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR GetGroup: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -96,7 +101,12 @@ func (h *GroupHandler) AddMember(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR AddMember: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -108,8 +118,13 @@ func (h *GroupHandler) AddMember(c *gin.Context) {
 	}
 
 	_, err = db.GetUserByID(h.DB, req.UserID)
-	if err != nil {
+	if err == db.ErrNotFound {
 		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "User not found"})
+		return
+	}
+	if err != nil {
+		log.Printf("ERROR AddMember: GetUserByID %d: %v", req.UserID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to look up user"})
 		return
 	}
 
@@ -140,7 +155,12 @@ func (h *GroupHandler) RemoveMember(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR RemoveMember: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -172,7 +192,12 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 
 	// Check if user is a member of this group
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR DeleteGroup: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}

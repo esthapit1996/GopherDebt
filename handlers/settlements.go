@@ -29,7 +29,12 @@ func (h *SettlementHandler) CreateSettlement(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR CreateSettlement: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -41,7 +46,12 @@ func (h *SettlementHandler) CreateSettlement(c *gin.Context) {
 	}
 
 	isMember, err = db.IsGroupMember(h.DB, groupID, req.PaidTo)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR CreateSettlement: IsGroupMember recipient group %d, user %d: %v", groupID, req.PaidTo, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify recipient membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Recipient must be a group member"})
 		return
 	}
@@ -74,7 +84,12 @@ func (h *SettlementHandler) GetGroupSettlements(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR GetGroupSettlements: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -98,7 +113,12 @@ func (h *SettlementHandler) GetGroupBalances(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR GetGroupBalances: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -122,7 +142,12 @@ func (h *SettlementHandler) GetMyBalance(c *gin.Context) {
 	}
 
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR GetMyBalance: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}

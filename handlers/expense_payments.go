@@ -42,7 +42,12 @@ func (h *ExpensePaymentHandler) CreateExpensePayment(c *gin.Context) {
 
 	// Verify user is a member of the group
 	isMember, err := db.IsGroupMember(h.DB, expense.GroupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR CreateExpensePayment: IsGroupMember group %d, user %d: %v", expense.GroupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -130,7 +135,12 @@ func (h *ExpensePaymentHandler) GetExpensePayments(c *gin.Context) {
 
 	// Verify user is a member of the group
 	isMember, err := db.IsGroupMember(h.DB, expense.GroupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR GetExpensePayments: IsGroupMember group %d, user %d: %v", expense.GroupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
@@ -195,7 +205,12 @@ func (h *ExpensePaymentHandler) GetGroupExpensePaymentStatuses(c *gin.Context) {
 
 	// Verify user is a member of the group
 	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
-	if err != nil || !isMember {
+	if err != nil {
+		log.Printf("ERROR GetGroupExpensePaymentStatuses: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
 		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
 		return
 	}
