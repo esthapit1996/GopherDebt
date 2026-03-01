@@ -23,7 +23,7 @@ func main() {
 		if dbPassword == "" {
 			log.Fatal("DB_PASSWORD environment variable is required")
 		}
-		connStr = fmt.Sprintf("host=aws-1-eu-west-1.pooler.supabase.com port=5432 user=postgres.rbcewoduprlgwydffiyz password=%s dbname=postgres sslmode=require", dbPassword)
+		connStr = fmt.Sprintf("host=aws-1-eu-west-1.pooler.supabase.com port=5432 user=postgres.rbcewoduprlgwydffiyz password=%s dbname=postgres sslmode=require connect_timeout=5", dbPassword)
 	}
 
 	database, err := sql.Open("postgres", connStr)
@@ -32,11 +32,11 @@ func main() {
 	}
 	defer database.Close()
 
-	// Connection pool settings to prevent stale connections on Supabase/Render
+	// Connection pool settings — aggressive recycling to avoid stale PgBouncer connections
 	database.SetMaxOpenConns(10)
-	database.SetMaxIdleConns(5)
-	database.SetConnMaxLifetime(5 * time.Minute)
-	database.SetConnMaxIdleTime(1 * time.Minute)
+	database.SetMaxIdleConns(3)
+	database.SetConnMaxLifetime(3 * time.Minute)
+	database.SetConnMaxIdleTime(30 * time.Second)
 
 	// Test connection
 	if err := database.Ping(); err != nil {

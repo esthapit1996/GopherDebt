@@ -22,52 +22,58 @@ func CreateUser(db *sql.DB, email, passwordHash, name string) (*models.User, err
 	return &user, nil
 }
 
-func GetUserByEmail(db *sql.DB, email string) (*models.User, error) {
-	var user models.User
-	err := db.QueryRow(
-		`SELECT id, email, password_hash, name, COALESCE(theme_preference, 'dark'), created_at, updated_at FROM users WHERE email = $1`,
-		email,
-	).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.ThemePreference, &user.CreatedAt, &user.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &user, nil
-}
-
-func GetUserByID(db *sql.DB, id int) (*models.User, error) {
-	var user models.User
-	err := db.QueryRow(
-		`SELECT id, email, name, COALESCE(theme_preference, 'dark'), created_at, updated_at FROM users WHERE id = $1`,
-		id,
-	).Scan(&user.ID, &user.Email, &user.Name, &user.ThemePreference, &user.CreatedAt, &user.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &user, nil
-}
-
-func GetAllUsers(db *sql.DB) ([]models.User, error) {
-	rows, err := db.Query(`SELECT id, email, name, COALESCE(theme_preference, 'dark'), created_at, updated_at FROM users ORDER BY name`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var users []models.User
-	for rows.Next() {
+func GetUserByEmail(d *sql.DB, email string) (*models.User, error) {
+	return retry("GetUserByEmail", func() (*models.User, error) {
 		var user models.User
-		if err := rows.Scan(&user.ID, &user.Email, &user.Name, &user.ThemePreference, &user.CreatedAt, &user.UpdatedAt); err != nil {
+		err := d.QueryRow(
+			`SELECT id, email, password_hash, name, COALESCE(theme_preference, 'dark'), created_at, updated_at FROM users WHERE email = $1`,
+			email,
+		).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.ThemePreference, &user.CreatedAt, &user.UpdatedAt)
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		if err != nil {
 			return nil, err
 		}
-		users = append(users, user)
-	}
-	return users, rows.Err()
+		return &user, nil
+	})
+}
+
+func GetUserByID(d *sql.DB, id int) (*models.User, error) {
+	return retry("GetUserByID", func() (*models.User, error) {
+		var user models.User
+		err := d.QueryRow(
+			`SELECT id, email, name, COALESCE(theme_preference, 'dark'), created_at, updated_at FROM users WHERE id = $1`,
+			id,
+		).Scan(&user.ID, &user.Email, &user.Name, &user.ThemePreference, &user.CreatedAt, &user.UpdatedAt)
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		return &user, nil
+	})
+}
+
+func GetAllUsers(d *sql.DB) ([]models.User, error) {
+	return retry("GetAllUsers", func() ([]models.User, error) {
+		rows, err := d.Query(`SELECT id, email, name, COALESCE(theme_preference, 'dark'), created_at, updated_at FROM users ORDER BY name`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		var users []models.User
+		for rows.Next() {
+			var user models.User
+			if err := rows.Scan(&user.ID, &user.Email, &user.Name, &user.ThemePreference, &user.CreatedAt, &user.UpdatedAt); err != nil {
+				return nil, err
+			}
+			users = append(users, user)
+		}
+		return users, rows.Err()
+	})
 }
 
 func UpdateUserTheme(db *sql.DB, userID int, theme string) error {
