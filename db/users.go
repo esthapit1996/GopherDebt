@@ -74,3 +74,66 @@ func UpdateUserTheme(db *sql.DB, userID int, theme string) error {
 	_, err := db.Exec(`UPDATE users SET theme_preference = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, theme, userID)
 	return err
 }
+
+const FounderEmail = "evansthapit20@gmail.com"
+
+func DeleteUser(db *sql.DB, userID int) error {
+	// Delete in proper order to satisfy foreign key constraints
+	// First delete user's expense payments
+	_, err := db.Exec(`DELETE FROM expense_payments WHERE paid_by = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete expense splits where user is involved
+	_, err = db.Exec(`DELETE FROM expense_splits WHERE user_id = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete user's expenses
+	_, err = db.Exec(`DELETE FROM expenses WHERE paid_by = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete settlements involving user
+	_, err = db.Exec(`DELETE FROM settlements WHERE paid_by = $1 OR paid_to = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete user's suggestion votes
+	_, err = db.Exec(`DELETE FROM suggestion_votes WHERE user_id = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete user's suggestion comments
+	_, err = db.Exec(`DELETE FROM suggestion_comments WHERE user_id = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete user's suggestions
+	_, err = db.Exec(`DELETE FROM suggestions WHERE user_id = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete group memberships
+	_, err = db.Exec(`DELETE FROM group_members WHERE user_id = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Delete groups created by user
+	_, err = db.Exec(`DELETE FROM groups WHERE created_by = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Finally delete the user
+	_, err = db.Exec(`DELETE FROM users WHERE id = $1`, userID)
+	return err
+}

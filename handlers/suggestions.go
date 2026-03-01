@@ -11,8 +11,8 @@ import (
 	"gopherdebt/models"
 )
 
-// Creator email - only this user can delete any suggestion
-const CreatorEmail = "evansthapit20@gmail.com"
+// Founder email - only this user can delete any suggestion
+const FounderEmail = "evansthapit20@gmail.com"
 
 type SuggestionHandler struct {
 	DB *sql.DB
@@ -23,7 +23,7 @@ func NewSuggestionHandler(database *sql.DB) *SuggestionHandler {
 }
 
 type CreateSuggestionRequest struct {
-	Content string `json:"content" binding:"required,max=800"`
+	Content string `json:"content" binding:"required,max=420"`
 }
 
 type VoteRequest struct {
@@ -70,7 +70,7 @@ func (h *SuggestionHandler) CreateSuggestion(c *gin.Context) {
 
 	var req CreateSuggestionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Content is required and must be max 800 characters"})
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Content is required and must be max 420 characters"})
 		return
 	}
 
@@ -83,7 +83,7 @@ func (h *SuggestionHandler) CreateSuggestion(c *gin.Context) {
 	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Data: suggestion})
 }
 
-// DeleteSuggestion deletes a suggestion (only creator of suggestion or app creator can delete)
+// DeleteSuggestion deletes a suggestion (only author of suggestion or app founder can delete)
 func (h *SuggestionHandler) DeleteSuggestion(c *gin.Context) {
 	userID := c.GetInt("userID")
 	suggestionID, err := strconv.Atoi(c.Param("id"))
@@ -106,9 +106,9 @@ func (h *SuggestionHandler) DeleteSuggestion(c *gin.Context) {
 		return
 	}
 
-	// Check if user is the creator of the suggestion OR the app creator
-	if suggestion.UserID != userID && user.Email != CreatorEmail {
-		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the suggestion author or app creator can delete this"})
+	// Check if user is the author of the suggestion OR the app founder
+	if suggestion.UserID != userID && user.Email != FounderEmail {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the suggestion author or app founder can delete this"})
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *SuggestionHandler) RemoveVote(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: "Vote removed"})
 }
 
-// GetVoters returns who voted on a suggestion (only for app creator)
+// GetVoters returns who voted on a suggestion (only for app founder)
 func (h *SuggestionHandler) GetVoters(c *gin.Context) {
 	userID := c.GetInt("userID")
 	suggestionID, err := strconv.Atoi(c.Param("id"))
@@ -176,15 +176,15 @@ func (h *SuggestionHandler) GetVoters(c *gin.Context) {
 		return
 	}
 
-	// Check if user is the app creator
+	// Check if user is the app founder
 	user, err := db.GetUserByID(h.DB, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify user"})
 		return
 	}
 
-	if user.Email != CreatorEmail {
-		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the app creator can view voters"})
+	if user.Email != FounderEmail {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the app founder can view voters"})
 		return
 	}
 
@@ -201,7 +201,7 @@ type UpdateStatusRequest struct {
 	Status string `json:"status" binding:"required,oneof=open wip done"`
 }
 
-// UpdateSuggestionStatus updates the status of a suggestion (only for app creator)
+// UpdateSuggestionStatus updates the status of a suggestion (only for app founder)
 func (h *SuggestionHandler) UpdateSuggestionStatus(c *gin.Context) {
 	userID := c.GetInt("userID")
 	suggestionID, err := strconv.Atoi(c.Param("id"))
@@ -210,15 +210,15 @@ func (h *SuggestionHandler) UpdateSuggestionStatus(c *gin.Context) {
 		return
 	}
 
-	// Check if user is the app creator
+	// Check if user is the app founder
 	user, err := db.GetUserByID(h.DB, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify user"})
 		return
 	}
 
-	if user.Email != CreatorEmail {
-		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the app creator can change suggestion status"})
+	if user.Email != FounderEmail {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the app founder can change suggestion status"})
 		return
 	}
 
@@ -234,4 +234,123 @@ func (h *SuggestionHandler) UpdateSuggestionStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: "Status updated"})
+}
+
+// Comment handlers
+
+type CreateCommentRequest struct {
+	Content string `json:"content" binding:"required,max=420"`
+}
+
+// GetComments returns all comments for a suggestion
+func (h *SuggestionHandler) GetComments(c *gin.Context) {
+	suggestionID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid suggestion ID"})
+		return
+	}
+
+	comments, err := db.GetSuggestionComments(h.DB, suggestionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch comments"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: comments})
+}
+
+// CreateComment adds a comment to a suggestion (only suggestion author or app founder)
+func (h *SuggestionHandler) CreateComment(c *gin.Context) {
+	userID := c.GetInt("userID")
+	suggestionID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid suggestion ID"})
+		return
+	}
+
+	// Get suggestion to check ownership
+	suggestion, err := db.GetSuggestionByID(h.DB, suggestionID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Suggestion not found"})
+		return
+	}
+
+	// Get current user to check if app founder
+	user, err := db.GetUserByID(h.DB, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify user"})
+		return
+	}
+
+	// Only suggestion author or app founder can comment
+	isFounder := user.Email == FounderEmail
+	isSuggestionOwner := suggestion.UserID == userID
+	if !isFounder && !isSuggestionOwner {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the suggestion author or app founder can comment"})
+		return
+	}
+
+	// Check comment limit (4 per user per suggestion)
+	commentCount, err := db.GetUserCommentCount(h.DB, suggestionID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to check comment count"})
+		return
+	}
+	if commentCount >= db.MaxCommentsPerUser {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Maximum 4 comments per suggestion reached"})
+		return
+	}
+
+	var req CreateCommentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Content is required and must be max 420 characters"})
+		return
+	}
+
+	comment, err := db.CreateComment(h.DB, suggestionID, userID, req.Content)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to create comment"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Data: comment})
+}
+
+// DeleteComment removes a comment (only comment owner or app founder)
+func (h *SuggestionHandler) DeleteComment(c *gin.Context) {
+	userID := c.GetInt("userID")
+	commentID, err := strconv.Atoi(c.Param("commentId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid comment ID"})
+		return
+	}
+
+	// Get comment to check ownership
+	comment, err := db.GetCommentByID(h.DB, commentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Comment not found"})
+		return
+	}
+
+	// Get current user to check if app founder
+	user, err := db.GetUserByID(h.DB, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify user"})
+		return
+	}
+
+	// Only comment owner or app founder can delete
+	isFounder := user.Email == FounderEmail
+	isCommentOwner := comment.UserID == userID
+	if !isFounder && !isCommentOwner {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the comment author or app owner can delete this comment"})
+		return
+	}
+
+	if err := db.DeleteComment(h.DB, commentID); err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to delete comment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: "Comment deleted"})
 }

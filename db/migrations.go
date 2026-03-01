@@ -114,6 +114,39 @@ func RunMigrations(db *sql.DB) error {
 		 AND a.user_id = b.user_id`,
 		// Add unique constraint if it doesn't exist
 		`CREATE UNIQUE INDEX IF NOT EXISTS unique_suggestion_user_vote ON suggestion_votes(suggestion_id, user_id)`,
+		// Suggestion comments table (max 420 chars, 4 comments per user per suggestion)
+		`CREATE TABLE IF NOT EXISTS suggestion_comments (
+			id SERIAL PRIMARY KEY,
+			suggestion_id INTEGER REFERENCES suggestions(id) ON DELETE CASCADE,
+			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+			content VARCHAR(420) NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_suggestion_comments_suggestion_id ON suggestion_comments(suggestion_id)`,
+		// Update suggestion content column to 420 chars
+		`ALTER TABLE suggestions ALTER COLUMN content TYPE VARCHAR(420)`,
+		// Email whitelist table
+		`CREATE TABLE IF NOT EXISTS email_whitelist (
+			id SERIAL PRIMARY KEY,
+			email VARCHAR(255) UNIQUE NOT NULL,
+			added_by INTEGER REFERENCES users(id),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		// Email blacklist table
+		`CREATE TABLE IF NOT EXISTS email_blacklist (
+			id SERIAL PRIMARY KEY,
+			email VARCHAR(255) UNIQUE NOT NULL,
+			reason VARCHAR(255),
+			added_by INTEGER REFERENCES users(id),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		// Seed default whitelist entries if table is empty
+		`INSERT INTO email_whitelist (email) 
+		 SELECT 'evansthapit20@gmail.com' 
+		 WHERE NOT EXISTS (SELECT 1 FROM email_whitelist WHERE email = 'evansthapit20@gmail.com')`,
+		`INSERT INTO email_whitelist (email) 
+		 SELECT 'e.ivanishcheva@yandex.ru' 
+		 WHERE NOT EXISTS (SELECT 1 FROM email_whitelist WHERE email = 'e.ivanishcheva@yandex.ru')`,
 	}
 
 	for i, migration := range migrations {

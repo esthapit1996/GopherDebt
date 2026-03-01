@@ -51,6 +51,7 @@ func main() {
 	activityHandler := handlers.NewActivityHandler(database)
 	suggestionHandler := handlers.NewSuggestionHandler(database)
 	currencyHandler := handlers.NewCurrencyHandler()
+	accessControlHandler := handlers.NewAccessControlHandler(database)
 
 	// Setup router
 	r := gin.Default()
@@ -107,6 +108,7 @@ func main() {
 		// User routes
 		api.GET("/profile", userHandler.GetProfile)
 		api.GET("/users", userHandler.GetAllUsers)
+		api.DELETE("/users/:id", userHandler.DeleteUser)
 		api.GET("/debt-overview", userHandler.GetDebtOverview)
 		api.GET("/payment-history", userHandler.GetPaymentHistory)
 		api.DELETE("/payment-history", userHandler.ClearPaymentHistory)
@@ -151,11 +153,22 @@ func main() {
 		api.DELETE("/suggestions/:id/vote", suggestionHandler.RemoveVote)
 		api.GET("/suggestions/:id/voters", suggestionHandler.GetVoters)
 		api.PUT("/suggestions/:id/status", suggestionHandler.UpdateSuggestionStatus)
+		api.GET("/suggestions/:id/comments", suggestionHandler.GetComments)
+		api.POST("/suggestions/:id/comments", suggestionHandler.CreateComment)
+		api.DELETE("/suggestions/:id/comments/:commentId", suggestionHandler.DeleteComment)
 
 		// Currency routes
 		api.GET("/currency/rates", currencyHandler.GetRates)
 		api.GET("/currency/convert", currencyHandler.Convert)
 		api.GET("/currency/history", currencyHandler.GetHistory)
+
+		// Access control routes (whitelist/blacklist)
+		api.GET("/whitelist", accessControlHandler.GetWhitelist)
+		api.POST("/whitelist", accessControlHandler.AddToWhitelist)
+		api.DELETE("/whitelist/:id", accessControlHandler.RemoveFromWhitelist)
+		api.GET("/blacklist", accessControlHandler.GetBlacklist)
+		api.POST("/blacklist", accessControlHandler.AddToBlacklist)
+		api.DELETE("/blacklist/:id", accessControlHandler.RemoveFromBlacklist)
 	}
 
 	// Start server

@@ -31,7 +31,9 @@ type Vote struct {
 }
 
 const MaxSuggestions = 20
-const MaxSuggestionLength = 800
+const MaxSuggestionLength = 420
+const MaxCommentLength = 420
+const MaxCommentsPerUser = 4
 
 // GetSuggestionCount returns the current number of suggestions
 func GetSuggestionCount(db *sql.DB) (int, error) {
@@ -143,7 +145,7 @@ func RemoveVote(db *sql.DB, suggestionID, userID int) error {
 	return err
 }
 
-// GetSuggestionVotes returns all votes for a suggestion (for admin/creator viewing)
+// GetSuggestionVotes returns all votes for a suggestion (for admin/founder viewing)
 func GetSuggestionVotes(db *sql.DB, suggestionID int) ([]Vote, error) {
 	rows, err := db.Query(`
 		SELECT v.id, v.suggestion_id, v.user_id, u.name, u.email, v.vote_type, v.created_at
@@ -172,4 +174,83 @@ func GetSuggestionVotes(db *sql.DB, suggestionID int) ([]Vote, error) {
 func UpdateSuggestionStatus(db *sql.DB, suggestionID int, status string) error {
 	_, err := db.Exec("UPDATE suggestions SET status = $1 WHERE id = $2", status, suggestionID)
 	return err
+}
+
+// Comment represents a comment on a suggestion
+type Comment struct {
+	ID           int       `json:"id"`
+	SuggestionID int       `json:"suggestion_id"`
+	UserID       int       `json:"user_id"`
+	UserName     string    `json:"user_name"`
+	Content      string    `json:"content"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// GetSuggestionComments returns all comments for a suggestion
+func GetSuggestionComments(db *sql.DB, suggestionID int) ([]Comment, error) {
+	rows, err := db.Query(`
+		SELECT c.id, c.suggestion_id, c.user_id, u.name, c.content, c.created_at
+		FROM suggestion_comments c
+		JOIN users u ON c.user_id = u.id
+		WHERE c.suggestion_id = $1
+		ORDER BY c.created_at ASC
+	`, suggestionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var comments []Comment
+	for rows.Next() {
+		var c Comment
+		if err := rows.Scan(&c.ID, &c.SuggestionID, &c.UserID, &c.UserName, &c.Content, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		comments = append(comments, c)
+	}
+	return comments, nil
+}
+
+// GetUserCommentCount returns how many comments a user has on a suggestion
+func GetUserCommentCount(db *sql.DB, suggestionID, userID int) (int, error) {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM suggestion_comments WHERE suggestion_id = $1 AND user_id = $2", suggestionID, userID).Scan(&count)
+	return count, err
+}
+
+// CreateComment adds a comment to a suggestion
+func CreateComment(db *sql.DB, suggestionID, userID int, content string) (*Comment, error) {
+	var c Comment
+	err := db.QueryRow(`
+		INSERT INTO suggestion_comments (suggestion_id, user_id, content)
+		VALUES ($1, $2, $3)
+		RETURNING id, suggestion_id, user_id, content, created_at
+	`, suggestionID, userID, content).Scan(&c.ID, &c.SuggestionID, &c.UserID, &c.Content, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	// Get user name
+	db.QueryRow("SELECT name FROM users WHERE id = $1", userID).Scan(&c.UserName)
+	return &c, nil
+}
+
+// DeleteComment removes a comment
+func DeleteComment(db *sql.DB, commentID int) error {
+	_, err := db.Exec("DELETE FROM suggestion_comments WHERE id = $1", commentID)
+	return err
+}
+
+// GetCommentByID returns a comment by ID
+func GetCommentByID(db *sql.DB, commentID int) (*Comment, error) {
+	var c Comment
+	err := db.QueryRow(`
+		SELECT c.id, c.suggestion_id, c.user_id, u.name, c.content, c.created_at
+		FROM suggestion_comments c
+		JOIN users u ON c.user_id = u.id
+		WHERE c.id = $1
+	`, commentID).Scan(&c.ID, &c.SuggestionID, &c.UserID, &c.UserName, &c.Content, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
 }

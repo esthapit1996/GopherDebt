@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,12 +23,6 @@ func NewUserHandler(database *sql.DB) *UserHandler {
 	return &UserHandler{DB: database}
 }
 
-// Whitelist of allowed emails for registration
-var allowedEmails = map[string]bool{
-	"evansthapit20@gmail.com":  true,
-	"e.ivanishcheva@yandex.ru": true,
-}
-
 func (h *UserHandler) Register(c *gin.Context) {
 	var req models.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -35,13 +30,29 @@ func (h *UserHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Check if email is whitelisted
-	if !allowedEmails[req.Email] {
-		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Sorry but the creator has deemed you unworthy! To request access, email evansthapit20@gmail.com"})
+	// Check if email is blacklisted first
+	blacklisted, err := db.IsEmailBlacklisted(h.DB, req.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to check access"})
+		return
+	}
+	if blacklisted {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "This email has been blocked from registration"})
 		return
 	}
 
-	_, err := db.GetUserByEmail(h.DB, req.Email)
+	// Check if email is whitelisted
+	whitelisted, err := db.IsEmailWhitelisted(h.DB, req.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to check access"})
+		return
+	}
+	if !whitelisted {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Sorry but the founder has deemed you unworthy! To request access, email evansthapit20@gmail.com"})
+		return
+	}
+
+	_, err = db.GetUserByEmail(h.DB, req.Email)
 	if err == nil {
 		c.JSON(http.StatusConflict, models.APIResponse{Success: false, Error: "User with this email already exists"})
 		return
@@ -183,4 +194,53 @@ func generateJWT(userID int) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
+}
+
+func (h *UserHandler) DeleteUser(c *gin.Context) {
+	// Get the requesting user
+	requesterID := c.GetInt("userID")
+	requester, err := db.GetUserByID(h.DB, requesterID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify requester"})
+		return
+	}
+
+	// Only founder can delete users
+	if requester.Email != db.FounderEmail {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the founder can delete users"})
+		return
+	}
+
+	// Get user ID to delete
+	userIDStr := c.Param("id")
+	userID, err := strconv.Atoi(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid user ID"})
+		return
+	}
+
+	// Get the user to be deleted
+	userToDelete, err := db.GetUserByID(h.DB, userID)
+	if err != nil {
+		if err == db.ErrNotFound {
+			c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "User not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch user"})
+		return
+	}
+
+	// Cannot delete the founder
+	if userToDelete.Email == db.FounderEmail {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Cannot delete the founder account"})
+		return
+	}
+
+	// Delete the user
+	if err := db.DeleteUser(h.DB, userID); err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to delete user"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: "User deleted successfully"})
 }
