@@ -286,7 +286,7 @@ func GetDebtOverview(d *sql.DB, userID int) ([]DebtOverviewItem, error) {
 			// Get all members of this group for userMap
 			members, err := GetGroupMembers(d, group.ID)
 			if err != nil {
-				continue
+				return nil, err
 			}
 			for i := range members {
 				if members[i].ID != userID {
@@ -303,7 +303,7 @@ func GetDebtOverview(d *sql.DB, userID int) ([]DebtOverviewItem, error) {
 				group.ID,
 			)
 			if err != nil {
-				continue
+				return nil, err
 			}
 
 			func() {
@@ -326,7 +326,7 @@ func GetDebtOverview(d *sql.DB, userID int) ([]DebtOverviewItem, error) {
 			// Factor in settlements
 			settlements, err := GetGroupSettlements(d, group.ID)
 			if err != nil {
-				continue
+				return nil, err
 			}
 			for _, s := range settlements {
 				if s.PaidBy == userID && s.PaidTo != userID {
@@ -346,7 +346,7 @@ func GetDebtOverview(d *sql.DB, userID int) ([]DebtOverviewItem, error) {
 				group.ID,
 			)
 			if err != nil {
-				continue
+				return nil, err
 			}
 
 			func() {

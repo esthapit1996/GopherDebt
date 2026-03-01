@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,7 +24,12 @@ func main() {
 		if dbPassword == "" {
 			log.Fatal("DB_PASSWORD environment variable is required")
 		}
-		connStr = fmt.Sprintf("host=aws-1-eu-west-1.pooler.supabase.com port=5432 user=postgres.rbcewoduprlgwydffiyz password=%s dbname=postgres sslmode=require connect_timeout=5", dbPassword)
+		connStr = fmt.Sprintf("host=aws-1-eu-west-1.pooler.supabase.com port=5432 user=postgres.rbcewoduprlgwydffiyz password=%s dbname=postgres sslmode=require connect_timeout=5 keepalives=1 keepalives_idle=30 keepalives_interval=10 keepalives_count=3", dbPassword)
+	} else {
+		// Append TCP keepalives to DATABASE_URL if not already present
+		if !strings.Contains(connStr, "keepalives") {
+			connStr += "?keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=3&connect_timeout=5"
+		}
 	}
 
 	database, err := sql.Open("postgres", connStr)
