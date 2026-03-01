@@ -49,6 +49,8 @@ func main() {
 	settlementHandler := handlers.NewSettlementHandler(database)
 	expensePaymentHandler := handlers.NewExpensePaymentHandler(database)
 	activityHandler := handlers.NewActivityHandler(database)
+	suggestionHandler := handlers.NewSuggestionHandler(database)
+	currencyHandler := handlers.NewCurrencyHandler()
 
 	// Setup router
 	r := gin.Default()
@@ -140,6 +142,20 @@ func main() {
 
 		// Activity routes
 		api.GET("/groups/:id/activities", activityHandler.GetGroupActivities)
+
+		// Suggestion routes
+		api.GET("/suggestions", suggestionHandler.GetSuggestions)
+		api.POST("/suggestions", suggestionHandler.CreateSuggestion)
+		api.DELETE("/suggestions/:id", suggestionHandler.DeleteSuggestion)
+		api.POST("/suggestions/:id/vote", suggestionHandler.VoteSuggestion)
+		api.DELETE("/suggestions/:id/vote", suggestionHandler.RemoveVote)
+		api.GET("/suggestions/:id/voters", suggestionHandler.GetVoters)
+		api.PUT("/suggestions/:id/status", suggestionHandler.UpdateSuggestionStatus)
+
+		// Currency routes
+		api.GET("/currency/rates", currencyHandler.GetRates)
+		api.GET("/currency/convert", currencyHandler.Convert)
+		api.GET("/currency/history", currencyHandler.GetHistory)
 	}
 
 	// Start server

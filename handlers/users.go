@@ -37,7 +37,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 
 	// Check if email is whitelisted
 	if !allowedEmails[req.Email] {
-		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Sorry but the creator has deemed you unworthy!"})
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Sorry but the creator has deemed you unworthy! To request access, email evansthapit20@gmail.com"})
 		return
 	}
 

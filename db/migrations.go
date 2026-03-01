@@ -85,6 +85,35 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE groups ADD COLUMN IF NOT EXISTS emoji VARCHAR(10) DEFAULT '💰'`,
 		// Add theme_preference column to users table
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT 'dark'`,
+		// Suggestions table (max 20 suggestions, 800 chars each)
+		`CREATE TABLE IF NOT EXISTS suggestions (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+			content VARCHAR(800) NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_suggestions_user_id ON suggestions(user_id)`,
+		// Expand content column to 800 chars (for existing tables)
+		`ALTER TABLE suggestions ALTER COLUMN content TYPE VARCHAR(800)`,
+		// Suggestion votes table (anonymous voting)
+		`CREATE TABLE IF NOT EXISTS suggestion_votes (
+			id SERIAL PRIMARY KEY,
+			suggestion_id INTEGER REFERENCES suggestions(id) ON DELETE CASCADE,
+			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+			vote_type VARCHAR(10) NOT NULL CHECK (vote_type IN ('like', 'dislike')),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(suggestion_id, user_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_suggestion_votes_suggestion_id ON suggestion_votes(suggestion_id)`,
+		// Add status column to suggestions (open, wip, done)
+		`ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'open'`,
+		// Clean up duplicate votes - keep only the most recent vote per user/suggestion
+		`DELETE FROM suggestion_votes a USING suggestion_votes b 
+		 WHERE a.id < b.id 
+		 AND a.suggestion_id = b.suggestion_id 
+		 AND a.user_id = b.user_id`,
+		// Add unique constraint if it doesn't exist
+		`CREATE UNIQUE INDEX IF NOT EXISTS unique_suggestion_user_vote ON suggestion_votes(suggestion_id, user_id)`,
 	}
 
 	for i, migration := range migrations {

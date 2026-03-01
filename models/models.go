@@ -88,7 +88,7 @@ type ExpenseSplit struct {
 // CreateExpenseRequest is the payload for creating a new expense
 type CreateExpenseRequest struct {
 	Amount      float64             `json:"amount" binding:"required,gt=0"`
-	Description string              `json:"description" binding:"required"`
+	Description string              `json:"description" binding:"required,max=69"`
 	SplitType   string              `json:"split_type" binding:"required,oneof=equal exact percentage"`
 	SplitWith   []ExpenseSplitInput `json:"split_with"`
 }
