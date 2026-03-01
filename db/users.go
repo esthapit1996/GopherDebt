@@ -81,6 +81,25 @@ func UpdateUserTheme(db *sql.DB, userID int, theme string) error {
 	return err
 }
 
+func GetUserPasswordHash(d *sql.DB, userID int) (string, error) {
+	return retry("GetUserPasswordHash", func() (string, error) {
+		var hash string
+		err := d.QueryRow(`SELECT password_hash FROM users WHERE id = $1`, userID).Scan(&hash)
+		if err == sql.ErrNoRows {
+			return "", ErrNotFound
+		}
+		if err != nil {
+			return "", err
+		}
+		return hash, nil
+	})
+}
+
+func UpdateUserPassword(db *sql.DB, userID int, newPasswordHash string) error {
+	_, err := db.Exec(`UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, newPasswordHash, userID)
+	return err
+}
+
 const FounderEmail = "evansthapit20@gmail.com"
 
 func DeleteUser(db *sql.DB, userID int) error {

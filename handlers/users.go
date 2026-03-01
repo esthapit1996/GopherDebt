@@ -196,6 +196,57 @@ func (h *UserHandler) UpdateTheme(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Theme updated"})
 }
 
+func (h *UserHandler) ChangePassword(c *gin.Context) {
+	userID := c.GetInt("userID")
+
+	var req models.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
+		return
+	}
+
+	if req.NewPassword != req.ConfirmPassword {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "New passwords do not match"})
+		return
+	}
+
+	if req.OldPassword == req.NewPassword {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "New password must be different from old password"})
+		return
+	}
+
+	// Get current password hash
+	currentHash, err := db.GetUserPasswordHash(h.DB, userID)
+	if err != nil {
+		log.Printf("ERROR ChangePassword: GetUserPasswordHash failed for user %d: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify current password"})
+		return
+	}
+
+	// Verify old password
+	if err := bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(req.OldPassword)); err != nil {
+		c.JSON(http.StatusUnauthorized, models.APIResponse{Success: false, Error: "Current password is incorrect"})
+		return
+	}
+
+	// Hash new password
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("ERROR ChangePassword: bcrypt failed for user %d: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to process new password"})
+		return
+	}
+
+	// Update password
+	if err := db.UpdateUserPassword(h.DB, userID, string(newHash)); err != nil {
+		log.Printf("ERROR ChangePassword: UpdateUserPassword failed for user %d: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to update password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Password changed successfully"})
+}
+
 func generateJWT(userID int) (string, error) {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {

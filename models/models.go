@@ -26,6 +26,13 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// ChangePasswordRequest is the payload for changing a user's password
+type ChangePasswordRequest struct {
+	OldPassword     string `json:"old_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=6"`
+	ConfirmPassword string `json:"confirm_password" binding:"required"`
+}
+
 // LoginResponse is returned after successful login
 type LoginResponse struct {
 	Token string `json:"token"`
