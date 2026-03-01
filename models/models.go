@@ -98,6 +98,7 @@ type CreateExpenseRequest struct {
 	Description string              `json:"description" binding:"required,max=69"`
 	SplitType   string              `json:"split_type" binding:"required,oneof=equal exact percentage"`
 	SplitWith   []ExpenseSplitInput `json:"split_with"`
+	PaidBy      int                 `json:"paid_by"`
 }
 
 // ExpenseSplitInput is used when creating an expense with exact/percentage split

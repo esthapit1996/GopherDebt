@@ -110,7 +110,24 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 		}
 	}
 
-	expense, err := db.CreateExpense(h.DB, groupID, userID, req.Amount, req.Description, req.SplitType, splits)
+	// Determine who paid: use req.PaidBy if provided, otherwise the logged-in user
+	payer := userID
+	if req.PaidBy > 0 {
+		// Verify the payer is a group member
+		payerIsMember, err := db.IsGroupMember(h.DB, groupID, req.PaidBy)
+		if err != nil {
+			log.Printf("ERROR CreateExpense: IsGroupMember payer %d, group %d: %v", req.PaidBy, groupID, err)
+			c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify payer membership"})
+			return
+		}
+		if !payerIsMember {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Payer must be a group member"})
+			return
+		}
+		payer = req.PaidBy
+	}
+
+	expense, err := db.CreateExpense(h.DB, groupID, payer, req.Amount, req.Description, req.SplitType, splits)
 	if err != nil {
 		log.Printf("ERROR CreateExpense: group %d, user %d: %v", groupID, userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to create expense"})
