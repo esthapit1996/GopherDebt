@@ -162,3 +162,42 @@ func (h *SettlementHandler) GetMyBalance(c *gin.Context) {
 	user, _ := db.GetUserByID(h.DB, userID)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: models.UserBalance{User: user, Balance: balance}})
 }
+
+func (h *SettlementHandler) DeleteSettlement(c *gin.Context) {
+	userID := c.GetInt("userID")
+	groupID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid group ID"})
+		return
+	}
+
+	settlementID, err := strconv.Atoi(c.Param("settlementID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid settlement ID"})
+		return
+	}
+
+	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
+	if err != nil {
+		log.Printf("ERROR DeleteSettlement: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
+		return
+	}
+
+	err = db.DeleteSettlement(h.DB, settlementID)
+	if err == db.ErrNotFound {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Settlement not found"})
+		return
+	}
+	if err != nil {
+		log.Printf("ERROR DeleteSettlement: settlement %d: %v", settlementID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to delete settlement"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Settlement deleted successfully"})
+}

@@ -155,6 +155,7 @@ func main() {
 		// Settlement routes
 		api.POST("/groups/:id/settlements", settlementHandler.CreateSettlement)
 		api.GET("/groups/:id/settlements", settlementHandler.GetGroupSettlements)
+		api.DELETE("/groups/:id/settlements/:settlementID", settlementHandler.DeleteSettlement)
 
 		// Balance routes
 		api.GET("/groups/:id/balances", settlementHandler.GetGroupBalances)

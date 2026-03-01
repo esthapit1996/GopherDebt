@@ -41,6 +41,21 @@ func GetGroupSettlements(d *sql.DB, groupID int) ([]models.Settlement, error) {
 	})
 }
 
+func DeleteSettlement(db *sql.DB, settlementID int) error {
+	result, err := db.Exec(`DELETE FROM settlements WHERE id = $1`, settlementID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func CalculateGroupBalances(d *sql.DB, groupID int) ([]models.Balance, error) {
 	return retry("CalculateGroupBalances", func() ([]models.Balance, error) {
 		members, err := GetGroupMembers(d, groupID)
