@@ -64,6 +64,12 @@ type CreateGroupRequest struct {
 	Emoji       string `json:"emoji"`
 }
 
+// UpdateGroupRequest is the payload for updating a group
+type UpdateGroupRequest struct {
+	Name        string `json:"name" binding:"required,max=69"`
+	Description string `json:"description" binding:"max=128"`
+}
+
 // AddMemberRequest is the payload for adding a member to a group
 type AddMemberRequest struct {
 	UserID int `json:"user_id" binding:"required"`

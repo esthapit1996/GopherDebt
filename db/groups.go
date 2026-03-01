@@ -95,6 +95,27 @@ func GetUserGroups(d *sql.DB, userID int) ([]models.Group, error) {
 	})
 }
 
+func UpdateGroup(db *sql.DB, groupID int, name, description string) (*models.Group, error) {
+	var group models.Group
+	err := db.QueryRow(
+		`UPDATE groups SET name = $1, description = $2, updated_at = NOW() WHERE id = $3 RETURNING id, name, description, COALESCE(emoji, '💰'), created_by, created_at, updated_at`,
+		name, description, groupID,
+	).Scan(&group.ID, &group.Name, &group.Description, &group.Emoji, &group.CreatedBy, &group.CreatedAt, &group.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	members, err := GetGroupMembers(db, groupID)
+	if err != nil {
+		return nil, err
+	}
+	group.Members = members
+	return &group, nil
+}
+
 func AddGroupMember(db *sql.DB, groupID, userID int) error {
 	_, err := db.Exec(`INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)`, groupID, userID)
 	return err

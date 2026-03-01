@@ -136,6 +136,7 @@ func main() {
 		api.POST("/groups", groupHandler.CreateGroup)
 		api.GET("/groups", groupHandler.GetMyGroups)
 		api.GET("/groups/:id", groupHandler.GetGroup)
+		api.PUT("/groups/:id", groupHandler.UpdateGroup)
 		api.DELETE("/groups/:id", groupHandler.DeleteGroup)
 		api.POST("/groups/:id/members", groupHandler.AddMember)
 		api.DELETE("/groups/:id/members/:memberID", groupHandler.RemoveMember)

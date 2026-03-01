@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -180,6 +181,70 @@ func (h *GroupHandler) RemoveMember(c *gin.Context) {
 	db.LogActivity(h.DB, groupID, userID, db.ActivityMemberRemoved, "Removed member", nil, &memberID)
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Member removed successfully"})
+}
+
+func (h *GroupHandler) UpdateGroup(c *gin.Context) {
+	userID := c.GetInt("userID")
+	groupID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid group ID"})
+		return
+	}
+
+	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
+	if err != nil {
+		log.Printf("ERROR UpdateGroup: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
+		return
+	}
+
+	var req models.UpdateGroupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
+		return
+	}
+
+	// Get old group to build activity description
+	oldGroup, err := db.GetGroupByID(h.DB, groupID)
+	if err == db.ErrNotFound {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Group not found"})
+		return
+	}
+	if err != nil {
+		log.Printf("ERROR UpdateGroup: GetGroupByID %d: %v", groupID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch group"})
+		return
+	}
+
+	group, err := db.UpdateGroup(h.DB, groupID, req.Name, req.Description)
+	if err == db.ErrNotFound {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Group not found"})
+		return
+	}
+	if err != nil {
+		log.Printf("ERROR UpdateGroup: group %d: %v", groupID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to update group"})
+		return
+	}
+
+	// Build activity description
+	var changes []string
+	if oldGroup.Name != req.Name {
+		changes = append(changes, "name: \""+oldGroup.Name+"\" → \""+req.Name+"\"")
+	}
+	if oldGroup.Description != req.Description {
+		changes = append(changes, "description updated")
+	}
+	if len(changes) > 0 {
+		desc := "Updated group: " + strings.Join(changes, ", ")
+		db.LogActivity(h.DB, groupID, userID, db.ActivityGroupUpdated, desc, nil, nil)
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Group updated successfully", Data: group})
 }
 
 func (h *GroupHandler) DeleteGroup(c *gin.Context) {

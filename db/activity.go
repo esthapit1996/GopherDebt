@@ -15,6 +15,7 @@ const (
 	ActivityMemberAdded    = "member_added"
 	ActivityMemberRemoved  = "member_removed"
 	ActivityGroupCreated   = "group_created"
+	ActivityGroupUpdated   = "group_updated"
 )
 
 // LogActivity records an activity in the group
