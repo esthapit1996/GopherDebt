@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -29,6 +30,7 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 
 	group, err := db.CreateGroup(h.DB, req.Name, req.Description, req.Emoji, userID)
 	if err != nil {
+		log.Printf("ERROR CreateGroup: user %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to create group"})
 		return
 	}
@@ -56,6 +58,7 @@ func (h *GroupHandler) GetGroup(c *gin.Context) {
 		return
 	}
 	if err != nil {
+		log.Printf("ERROR GetGroup: GetGroupByID %d: %v", groupID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch group"})
 		return
 	}
@@ -67,6 +70,7 @@ func (h *GroupHandler) GetMyGroups(c *gin.Context) {
 	userID := c.GetInt("userID")
 	groups, err := db.GetUserGroups(h.DB, userID)
 	if err != nil {
+		log.Printf("ERROR GetMyGroups: user %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch groups"})
 		return
 	}
@@ -147,6 +151,7 @@ func (h *GroupHandler) RemoveMember(c *gin.Context) {
 		return
 	}
 	if err != nil {
+		log.Printf("ERROR RemoveMember: group %d, member %d: %v", groupID, memberID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to remove member"})
 		return
 	}
@@ -178,6 +183,7 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 		return
 	}
 	if err != nil {
+		log.Printf("ERROR DeleteGroup: GetGroupByID %d: %v", groupID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch group"})
 		return
 	}
@@ -185,6 +191,7 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 	// Check if all balances are settled
 	isSettled, err := db.IsGroupSettled(h.DB, groupID)
 	if err != nil {
+		log.Printf("ERROR DeleteGroup: IsGroupSettled %d: %v", groupID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to check balances"})
 		return
 	}
@@ -195,6 +202,7 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 
 	err = db.DeleteGroup(h.DB, groupID)
 	if err != nil {
+		log.Printf("ERROR DeleteGroup: DeleteGroup %d: %v", groupID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to delete group"})
 		return
 	}

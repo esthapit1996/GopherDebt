@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -45,6 +46,7 @@ func (h *ActivityHandler) GetGroupActivities(c *gin.Context) {
 
 	activities, err := db.GetGroupActivities(h.DB, groupID, limit)
 	if err != nil {
+		log.Printf("ERROR GetGroupActivities: group %d: %v", groupID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch activities"})
 		return
 	}

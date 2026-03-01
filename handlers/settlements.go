@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -52,6 +53,7 @@ func (h *SettlementHandler) CreateSettlement(c *gin.Context) {
 
 	settlement, err := db.CreateSettlement(h.DB, groupID, userID, req.PaidTo, req.Amount)
 	if err != nil {
+		log.Printf("ERROR CreateSettlement: group %d, user %d -> %d: %v", groupID, userID, req.PaidTo, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to create settlement"})
 		return
 	}
@@ -79,6 +81,7 @@ func (h *SettlementHandler) GetGroupSettlements(c *gin.Context) {
 
 	settlements, err := db.GetGroupSettlements(h.DB, groupID)
 	if err != nil {
+		log.Printf("ERROR GetGroupSettlements: group %d: %v", groupID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch settlements"})
 		return
 	}
@@ -102,6 +105,7 @@ func (h *SettlementHandler) GetGroupBalances(c *gin.Context) {
 
 	balances, err := db.CalculateGroupBalances(h.DB, groupID)
 	if err != nil {
+		log.Printf("ERROR GetGroupBalances: group %d: %v", groupID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to calculate balances"})
 		return
 	}
@@ -125,6 +129,7 @@ func (h *SettlementHandler) GetMyBalance(c *gin.Context) {
 
 	balance, err := db.GetUserBalanceInGroup(h.DB, groupID, userID)
 	if err != nil {
+		log.Printf("ERROR GetMyBalance: group %d, user %d: %v", groupID, userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to calculate balance"})
 		return
 	}

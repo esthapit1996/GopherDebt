@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -33,6 +34,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 	// Check if email is blacklisted first
 	blacklisted, err := db.IsEmailBlacklisted(h.DB, req.Email)
 	if err != nil {
+		log.Printf("ERROR Register: IsEmailBlacklisted failed for %s: %v", req.Email, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to check access"})
 		return
 	}
@@ -44,6 +46,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 	// Check if email is whitelisted
 	whitelisted, err := db.IsEmailWhitelisted(h.DB, req.Email)
 	if err != nil {
+		log.Printf("ERROR Register: IsEmailWhitelisted failed for %s: %v", req.Email, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to check access"})
 		return
 	}
@@ -60,12 +63,14 @@ func (h *UserHandler) Register(c *gin.Context) {
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
+		log.Printf("ERROR Register: bcrypt failed: %v", err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to process password"})
 		return
 	}
 
 	user, err := db.CreateUser(h.DB, req.Email, string(hashedPassword), req.Name)
 	if err != nil {
+		log.Printf("ERROR Register: CreateUser failed for %s: %v", req.Email, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to create user"})
 		return
 	}
@@ -93,6 +98,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 	token, err := generateJWT(user.ID)
 	if err != nil {
+		log.Printf("ERROR Login: generateJWT failed for user %d: %v", user.ID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to generate token"})
 		return
 	}
@@ -104,6 +110,7 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 	userID := c.GetInt("userID")
 	user, err := db.GetUserByID(h.DB, userID)
 	if err != nil {
+		log.Printf("ERROR GetProfile: GetUserByID failed for user %d: %v", userID, err)
 		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "User not found"})
 		return
 	}
@@ -113,6 +120,7 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 func (h *UserHandler) GetAllUsers(c *gin.Context) {
 	users, err := db.GetAllUsers(h.DB)
 	if err != nil {
+		log.Printf("ERROR GetAllUsers: %v", err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch users"})
 		return
 	}
@@ -123,6 +131,7 @@ func (h *UserHandler) GetDebtOverview(c *gin.Context) {
 	userID := c.GetInt("userID")
 	overview, err := db.GetDebtOverview(h.DB, userID)
 	if err != nil {
+		log.Printf("ERROR GetDebtOverview: user %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch debt overview"})
 		return
 	}
@@ -133,6 +142,7 @@ func (h *UserHandler) GetPaymentHistory(c *gin.Context) {
 	userID := c.GetInt("userID")
 	history, err := db.GetPaymentHistory(h.DB, userID)
 	if err != nil {
+		log.Printf("ERROR GetPaymentHistory: user %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch payment history"})
 		return
 	}
@@ -143,6 +153,7 @@ func (h *UserHandler) ClearPaymentHistory(c *gin.Context) {
 	userID := c.GetInt("userID")
 	err := db.ClearPaymentHistory(h.DB, userID)
 	if err != nil {
+		log.Printf("ERROR ClearPaymentHistory: user %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to clear payment history"})
 		return
 	}
@@ -173,6 +184,7 @@ func (h *UserHandler) UpdateTheme(c *gin.Context) {
 
 	err := db.UpdateUserTheme(h.DB, userID, req.Theme)
 	if err != nil {
+		log.Printf("ERROR UpdateTheme: user %d, theme %s: %v", userID, req.Theme, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to update theme"})
 		return
 	}
@@ -201,6 +213,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 	requesterID := c.GetInt("userID")
 	requester, err := db.GetUserByID(h.DB, requesterID)
 	if err != nil {
+		log.Printf("ERROR DeleteUser: GetUserByID failed for requester %d: %v", requesterID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify requester"})
 		return
 	}
@@ -226,6 +239,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 			c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "User not found"})
 			return
 		}
+		log.Printf("ERROR DeleteUser: GetUserByID failed for target %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch user"})
 		return
 	}
@@ -238,6 +252,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 
 	// Delete the user
 	if err := db.DeleteUser(h.DB, userID); err != nil {
+		log.Printf("ERROR DeleteUser: DeleteUser failed for %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to delete user"})
 		return
 	}

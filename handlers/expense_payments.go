@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -49,6 +50,7 @@ func (h *ExpensePaymentHandler) CreateExpensePayment(c *gin.Context) {
 	// Get what this user owes for this expense
 	splits, err := db.GetExpenseSplits(h.DB, expenseID)
 	if err != nil {
+		log.Printf("ERROR CreateExpensePayment: GetExpenseSplits %d: %v", expenseID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to get expense splits"})
 		return
 	}
@@ -70,6 +72,7 @@ func (h *ExpensePaymentHandler) CreateExpensePayment(c *gin.Context) {
 	// Calculate how much they've already paid
 	alreadyPaid, err := db.GetTotalPaymentsForExpense(h.DB, expenseID, userID)
 	if err != nil {
+		log.Printf("ERROR CreateExpensePayment: GetTotalPayments expense %d, user %d: %v", expenseID, userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to calculate existing payments"})
 		return
 	}
@@ -92,6 +95,7 @@ func (h *ExpensePaymentHandler) CreateExpensePayment(c *gin.Context) {
 
 	payment, err := db.CreateExpensePayment(h.DB, expenseID, userID, req.Amount, req.Note)
 	if err != nil {
+		log.Printf("ERROR CreateExpensePayment: expense %d, user %d: %v", expenseID, userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to create payment"})
 		return
 	}
@@ -133,6 +137,7 @@ func (h *ExpensePaymentHandler) GetExpensePayments(c *gin.Context) {
 
 	payments, err := db.GetExpensePayments(h.DB, expenseID)
 	if err != nil {
+		log.Printf("ERROR GetExpensePayments: expense %d: %v", expenseID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to get payments"})
 		return
 	}
@@ -171,6 +176,7 @@ func (h *ExpensePaymentHandler) DeleteExpensePayment(c *gin.Context) {
 	}
 
 	if err := db.DeleteExpensePayment(h.DB, paymentID); err != nil {
+		log.Printf("ERROR DeleteExpensePayment: payment %d: %v", paymentID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to delete payment"})
 		return
 	}
@@ -196,6 +202,7 @@ func (h *ExpensePaymentHandler) GetGroupExpensePaymentStatuses(c *gin.Context) {
 
 	statuses, err := db.GetGroupExpensePaymentStatuses(h.DB, groupID)
 	if err != nil {
+		log.Printf("ERROR GetGroupExpensePaymentStatuses: group %d: %v", groupID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to get payment statuses"})
 		return
 	}

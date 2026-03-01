@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -45,6 +46,7 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 	case "equal":
 		members, err := db.GetGroupMembers(h.DB, groupID)
 		if err != nil {
+			log.Printf("ERROR CreateExpense: GetGroupMembers for group %d: %v", groupID, err)
 			c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to get group members"})
 			return
 		}
@@ -100,6 +102,7 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 
 	expense, err := db.CreateExpense(h.DB, groupID, userID, req.Amount, req.Description, req.SplitType, splits)
 	if err != nil {
+		log.Printf("ERROR CreateExpense: group %d, user %d: %v", groupID, userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to create expense"})
 		return
 	}
@@ -128,6 +131,7 @@ func (h *ExpenseHandler) GetGroupExpenses(c *gin.Context) {
 
 	expenses, err := db.GetGroupExpenses(h.DB, groupID)
 	if err != nil {
+		log.Printf("ERROR GetGroupExpenses: group %d: %v", groupID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch expenses"})
 		return
 	}
@@ -161,6 +165,7 @@ func (h *ExpenseHandler) GetExpense(c *gin.Context) {
 		return
 	}
 	if err != nil {
+		log.Printf("ERROR GetExpense: expense %d: %v", expenseID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch expense"})
 		return
 	}
@@ -199,6 +204,7 @@ func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
 		return
 	}
 	if err != nil {
+		log.Printf("ERROR DeleteExpense: GetExpenseByID %d: %v", expenseID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch expense"})
 		return
 	}
@@ -210,6 +216,7 @@ func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
 
 	err = db.DeleteExpense(h.DB, expenseID)
 	if err != nil {
+		log.Printf("ERROR DeleteExpense: DeleteExpense %d: %v", expenseID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to delete expense"})
 		return
 	}
