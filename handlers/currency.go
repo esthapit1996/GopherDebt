@@ -201,6 +201,18 @@ func (h *CurrencyHandler) GetHistory(c *gin.Context) {
 		return
 	}
 
+	// If Frankfurter returned no rates, the currency pair is not supported
+	if len(result.Rates) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"from":    from,
+			"to":      to,
+			"days":    days,
+			"history": []HistoricalRate{},
+			"error":   fmt.Sprintf("Historical data not available — Frankfurter (ECB) does not support %s and/or %s", from, to),
+		})
+		return
+	}
+
 	// Convert to sorted slice
 	var history []HistoricalRate
 	for date, rates := range result.Rates {
