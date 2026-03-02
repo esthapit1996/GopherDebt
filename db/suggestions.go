@@ -12,6 +12,7 @@ type Suggestion struct {
 	UserName     string    `json:"user_name"`
 	UserEmail    string    `json:"user_email"`
 	Content      string    `json:"content"`
+	Type         string    `json:"type"`   // "feature", "bug", "theme", "change", "complaint", "praise", "ux", "other"
 	Status       string    `json:"status"` // "open", "wip", "done"
 	CreatedAt    time.Time `json:"created_at"`
 	Likes        int       `json:"likes"`
@@ -53,7 +54,7 @@ func GetOpenSuggestionCount(db *sql.DB) (int, error) {
 // GetAllSuggestions returns all suggestions with user info and vote counts
 func GetAllSuggestions(db *sql.DB, currentUserID int) ([]Suggestion, error) {
 	rows, err := db.Query(`
-		SELECT s.id, s.user_id, u.name, u.email, s.content, COALESCE(s.status, 'open'), s.created_at,
+		SELECT s.id, s.user_id, u.name, u.email, s.content, COALESCE(s.type, 'other'), COALESCE(s.status, 'open'), s.created_at,
 			COALESCE((SELECT COUNT(*) FROM suggestion_votes WHERE suggestion_id = s.id AND vote_type = 'like'), 0) as likes,
 			COALESCE((SELECT COUNT(*) FROM suggestion_votes WHERE suggestion_id = s.id AND vote_type = 'dislike'), 0) as dislikes,
 			COALESCE((SELECT vote_type FROM suggestion_votes WHERE suggestion_id = s.id AND user_id = $1), '') as user_vote,
@@ -70,7 +71,7 @@ func GetAllSuggestions(db *sql.DB, currentUserID int) ([]Suggestion, error) {
 	var suggestions []Suggestion
 	for rows.Next() {
 		var s Suggestion
-		if err := rows.Scan(&s.ID, &s.UserID, &s.UserName, &s.UserEmail, &s.Content, &s.Status, &s.CreatedAt, &s.Likes, &s.Dislikes, &s.UserVote, &s.CommentCount); err != nil {
+		if err := rows.Scan(&s.ID, &s.UserID, &s.UserName, &s.UserEmail, &s.Content, &s.Type, &s.Status, &s.CreatedAt, &s.Likes, &s.Dislikes, &s.UserVote, &s.CommentCount); err != nil {
 			return nil, err
 		}
 		suggestions = append(suggestions, s)
@@ -79,18 +80,21 @@ func GetAllSuggestions(db *sql.DB, currentUserID int) ([]Suggestion, error) {
 }
 
 // CreateSuggestion creates a new suggestion (enforces max 10 limit)
-func CreateSuggestion(db *sql.DB, userID int, content string) (*Suggestion, error) {
+func CreateSuggestion(db *sql.DB, userID int, content, suggestionType string) (*Suggestion, error) {
 	// Truncate content if too long
 	if len(content) > MaxSuggestionLength {
 		content = content[:MaxSuggestionLength]
 	}
+	if suggestionType == "" {
+		suggestionType = "other"
+	}
 
 	var suggestion Suggestion
 	err := db.QueryRow(`
-		INSERT INTO suggestions (user_id, content) 
-		VALUES ($1, $2) 
-		RETURNING id, user_id, content, created_at
-	`, userID, content).Scan(&suggestion.ID, &suggestion.UserID, &suggestion.Content, &suggestion.CreatedAt)
+		INSERT INTO suggestions (user_id, content, type) 
+		VALUES ($1, $2, $3) 
+		RETURNING id, user_id, content, COALESCE(type, 'other'), created_at
+	`, userID, content, suggestionType).Scan(&suggestion.ID, &suggestion.UserID, &suggestion.Content, &suggestion.Type, &suggestion.CreatedAt)
 	if err != nil {
 		return nil, err
 	}

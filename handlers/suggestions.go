@@ -24,6 +24,7 @@ func NewSuggestionHandler(database *sql.DB) *SuggestionHandler {
 
 type CreateSuggestionRequest struct {
 	Content string `json:"content" binding:"required,max=420"`
+	Type    string `json:"type"`
 }
 
 type VoteRequest struct {
@@ -74,7 +75,7 @@ func (h *SuggestionHandler) CreateSuggestion(c *gin.Context) {
 		return
 	}
 
-	suggestion, err := db.CreateSuggestion(h.DB, userID, req.Content)
+	suggestion, err := db.CreateSuggestion(h.DB, userID, req.Content, req.Type)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to create suggestion"})
 		return

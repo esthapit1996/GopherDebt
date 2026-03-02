@@ -149,6 +149,8 @@ func RunMigrations(db *sql.DB) error {
 		 WHERE NOT EXISTS (SELECT 1 FROM email_whitelist WHERE email = 'e.ivanishcheva@yandex.ru')`,
 		// Add avatar column to users table
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar VARCHAR(50) DEFAULT ''`,
+		// Add type column to suggestions table
+		`ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS type VARCHAR(30) DEFAULT 'other'`,
 	}
 
 	for i, migration := range migrations {
