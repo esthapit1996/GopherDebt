@@ -51,7 +51,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 		return
 	}
 	if !whitelisted {
-		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Sorry but the founder has deemed you unworthy! To request access, email evansthapit20@gmail.com"})
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not worthy!"})
 		return
 	}
 
