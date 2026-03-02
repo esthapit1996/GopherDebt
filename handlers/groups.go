@@ -166,6 +166,18 @@ func (h *GroupHandler) RemoveMember(c *gin.Context) {
 		return
 	}
 
+	// Check if the member has outstanding balances
+	balance, err := db.GetUserBalanceInGroup(h.DB, groupID, memberID)
+	if err != nil {
+		log.Printf("ERROR RemoveMember: GetUserBalanceInGroup group %d, member %d: %v", groupID, memberID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to check member balance"})
+		return
+	}
+	if balance > 0.01 || balance < -0.01 {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Cannot remove member with unsettled balances. Please settle all debts first."})
+		return
+	}
+
 	err = db.RemoveGroupMember(h.DB, groupID, memberID)
 	if err == db.ErrNotFound {
 		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Member not found in group"})
