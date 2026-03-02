@@ -171,6 +171,40 @@ func (h *ExpenseHandler) GetGroupExpenses(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: expenses})
 }
 
+// GetUnpaidExpenses returns only expenses where the current user still owes money
+func (h *ExpenseHandler) GetUnpaidExpenses(c *gin.Context) {
+	userID := c.GetInt("userID")
+	groupID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid group ID"})
+		return
+	}
+
+	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
+	if err != nil {
+		log.Printf("ERROR GetUnpaidExpenses: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
+		return
+	}
+
+	expenses, err := db.GetUnpaidExpensesForUser(h.DB, groupID, userID)
+	if err != nil {
+		log.Printf("ERROR GetUnpaidExpenses: group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch unpaid expenses"})
+		return
+	}
+
+	if expenses == nil {
+		expenses = []models.Expense{}
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: expenses})
+}
+
 func (h *ExpenseHandler) GetExpense(c *gin.Context) {
 	userID := c.GetInt("userID")
 	groupID, err := strconv.Atoi(c.Param("id"))

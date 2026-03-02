@@ -120,6 +120,46 @@ func GetExpenseSplits(d *sql.DB, expenseID int) ([]models.ExpenseSplit, error) {
 	})
 }
 
+// GetUnpaidExpensesForUser returns expenses in a group where the given user still owes money.
+// An expense is "unpaid" for a user if their split amount minus their payments is > 0
+// and they are not the one who originally paid for the expense.
+func GetUnpaidExpensesForUser(d *sql.DB, groupID, userID int) ([]models.Expense, error) {
+	return retry("GetUnpaidExpensesForUser", func() ([]models.Expense, error) {
+		rows, err := d.Query(
+			`SELECT e.id, e.group_id, e.paid_by, e.amount, e.description, e.split_type, e.created_at, e.updated_at,
+				u.id, u.email, u.name
+			FROM expenses e
+			LEFT JOIN users u ON e.paid_by = u.id
+			INNER JOIN expense_splits es ON es.expense_id = e.id AND es.user_id = $2
+			WHERE e.group_id = $1
+			  AND e.paid_by != $2
+			  AND es.amount - COALESCE((SELECT SUM(ep.amount) FROM expense_payments ep WHERE ep.expense_id = e.id AND ep.paid_by = $2), 0) > 0.01
+			ORDER BY e.created_at DESC`,
+			groupID, userID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		var expenses []models.Expense
+		for rows.Next() {
+			var expense models.Expense
+			var payer models.User
+			if err := rows.Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.CreatedAt, &expense.UpdatedAt, &payer.ID, &payer.Email, &payer.Name); err != nil {
+				return nil, err
+			}
+			expense.PaidByUser = &payer
+			splits, err := GetExpenseSplits(d, expense.ID)
+			if err == nil {
+				expense.Splits = splits
+			}
+			expenses = append(expenses, expense)
+		}
+		return expenses, rows.Err()
+	})
+}
+
 func DeleteExpense(db *sql.DB, expenseID int) error {
 	result, err := db.Exec(`DELETE FROM expenses WHERE id = $1`, expenseID)
 	if err != nil {
