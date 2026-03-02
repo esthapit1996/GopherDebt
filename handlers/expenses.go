@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -301,4 +302,36 @@ func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
 	db.LogActivity(h.DB, groupID, userID, db.ActivityExpenseDeleted, expense.Description, &expense.Amount, nil)
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Expense deleted successfully"})
+}
+
+func (h *ExpenseHandler) ClearAllExpenses(c *gin.Context) {
+	userID := c.GetInt("userID")
+	groupID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid group ID"})
+		return
+	}
+
+	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
+	if err != nil {
+		log.Printf("ERROR ClearAllExpenses: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
+		return
+	}
+
+	deleted, err := db.DeleteAllGroupExpenses(h.DB, groupID)
+	if err != nil {
+		log.Printf("ERROR ClearAllExpenses: DeleteAllGroupExpenses group %d: %v", groupID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to clear expenses"})
+		return
+	}
+
+	desc := fmt.Sprintf("Cleared %d expenses", deleted)
+	db.LogActivity(h.DB, groupID, userID, db.ActivityExpenseDeleted, desc, nil, nil)
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: fmt.Sprintf("Cleared %d expenses", deleted)})
 }

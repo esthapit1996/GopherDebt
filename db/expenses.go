@@ -174,3 +174,11 @@ func DeleteExpense(db *sql.DB, expenseID int) error {
 	}
 	return nil
 }
+
+func DeleteAllGroupExpenses(db *sql.DB, groupID int) (int64, error) {
+	result, err := db.Exec(`DELETE FROM expenses WHERE group_id = $1`, groupID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
