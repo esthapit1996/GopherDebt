@@ -24,7 +24,7 @@ func GetExpensePayments(d *sql.DB, expenseID int) ([]models.ExpensePayment, erro
 	return retry("GetExpensePayments", func() ([]models.ExpensePayment, error) {
 		rows, err := d.Query(
 			`SELECT ep.id, ep.expense_id, ep.paid_by, ep.amount, COALESCE(ep.note, ''), ep.created_at,
-				u.id, u.email, u.name
+				u.id, u.email, u.name, COALESCE(u.avatar, '')
 			FROM expense_payments ep
 			JOIN users u ON ep.paid_by = u.id
 			WHERE ep.expense_id = $1
@@ -41,7 +41,7 @@ func GetExpensePayments(d *sql.DB, expenseID int) ([]models.ExpensePayment, erro
 			var payment models.ExpensePayment
 			var user models.User
 			err := rows.Scan(&payment.ID, &payment.ExpenseID, &payment.PaidBy, &payment.Amount, &payment.Note, &payment.CreatedAt,
-				&user.ID, &user.Email, &user.Name)
+				&user.ID, &user.Email, &user.Name, &user.Avatar)
 			if err != nil {
 				return nil, err
 			}
