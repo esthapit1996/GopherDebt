@@ -7,16 +7,17 @@ import (
 
 // Suggestion represents a user suggestion
 type Suggestion struct {
-	ID        int       `json:"id"`
-	UserID    int       `json:"user_id"`
-	UserName  string    `json:"user_name"`
-	UserEmail string    `json:"user_email"`
-	Content   string    `json:"content"`
-	Status    string    `json:"status"` // "open", "wip", "done"
-	CreatedAt time.Time `json:"created_at"`
-	Likes     int       `json:"likes"`
-	Dislikes  int       `json:"dislikes"`
-	UserVote  string    `json:"user_vote,omitempty"` // "like", "dislike", or ""
+	ID           int       `json:"id"`
+	UserID       int       `json:"user_id"`
+	UserName     string    `json:"user_name"`
+	UserEmail    string    `json:"user_email"`
+	Content      string    `json:"content"`
+	Status       string    `json:"status"` // "open", "wip", "done"
+	CreatedAt    time.Time `json:"created_at"`
+	Likes        int       `json:"likes"`
+	Dislikes     int       `json:"dislikes"`
+	UserVote     string    `json:"user_vote,omitempty"` // "like", "dislike", or ""
+	CommentCount int       `json:"comment_count"`
 }
 
 // Vote represents a vote on a suggestion (for admin viewing)
@@ -55,7 +56,8 @@ func GetAllSuggestions(db *sql.DB, currentUserID int) ([]Suggestion, error) {
 		SELECT s.id, s.user_id, u.name, u.email, s.content, COALESCE(s.status, 'open'), s.created_at,
 			COALESCE((SELECT COUNT(*) FROM suggestion_votes WHERE suggestion_id = s.id AND vote_type = 'like'), 0) as likes,
 			COALESCE((SELECT COUNT(*) FROM suggestion_votes WHERE suggestion_id = s.id AND vote_type = 'dislike'), 0) as dislikes,
-			COALESCE((SELECT vote_type FROM suggestion_votes WHERE suggestion_id = s.id AND user_id = $1), '') as user_vote
+			COALESCE((SELECT vote_type FROM suggestion_votes WHERE suggestion_id = s.id AND user_id = $1), '') as user_vote,
+			COALESCE((SELECT COUNT(*) FROM suggestion_comments WHERE suggestion_id = s.id), 0) as comment_count
 		FROM suggestions s
 		JOIN users u ON s.user_id = u.id
 		ORDER BY s.created_at DESC
@@ -68,7 +70,7 @@ func GetAllSuggestions(db *sql.DB, currentUserID int) ([]Suggestion, error) {
 	var suggestions []Suggestion
 	for rows.Next() {
 		var s Suggestion
-		if err := rows.Scan(&s.ID, &s.UserID, &s.UserName, &s.UserEmail, &s.Content, &s.Status, &s.CreatedAt, &s.Likes, &s.Dislikes, &s.UserVote); err != nil {
+		if err := rows.Scan(&s.ID, &s.UserID, &s.UserName, &s.UserEmail, &s.Content, &s.Status, &s.CreatedAt, &s.Likes, &s.Dislikes, &s.UserVote, &s.CommentCount); err != nil {
 			return nil, err
 		}
 		suggestions = append(suggestions, s)
