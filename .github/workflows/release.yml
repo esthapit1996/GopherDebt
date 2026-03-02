@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Need full history for tags and changelog
+
+      - name: Get latest tag
+        id: latest_tag
+        run: |
+          TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$TAG" ]; then
+            TAG="v0.0.0"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Latest tag: $TAG"
+
+      - name: Determine version bump
+        id: bump
+        run: |
+          CURRENT="${{ steps.latest_tag.outputs.tag }}"
+          # Strip the 'v' prefix
+          VERSION="${CURRENT#v}"
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+
+          # Check commit messages since last tag for bump keywords
+          if [ "$CURRENT" = "v0.0.0" ]; then
+            COMMITS=$(git log --oneline --format="%s")
+          else
+            COMMITS=$(git log "${CURRENT}..HEAD" --oneline --format="%s")
+          fi
+
+          if echo "$COMMITS" | grep -qiE '^major:|BREAKING CHANGE'; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qiE '^minor:|^feat'; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            BUMP="minor"
+          else
+            PATCH=$((PATCH + 1))
+            BUMP="patch"
+          fi
+
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "Bump: $BUMP -> $NEW_TAG"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          CURRENT="${{ steps.latest_tag.outputs.tag }}"
+          if [ "$CURRENT" = "v0.0.0" ]; then
+            LOG=$(git log --oneline --format="- %s (%h)" -20)
+          else
+            LOG=$(git log "${CURRENT}..HEAD" --oneline --format="- %s (%h)")
+          fi
+
+          # Write to file to handle multiline
+          echo "$LOG" > /tmp/changelog.md
+          echo "Generated changelog with $(echo "$LOG" | wc -l) entries"
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.bump.outputs.new_tag }}" \
+            --title "${{ steps.bump.outputs.new_tag }}" \
+            --notes-file /tmp/changelog.md \
+            --target main
