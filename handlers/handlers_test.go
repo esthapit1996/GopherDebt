@@ -431,7 +431,7 @@ func TestUpdateTheme_InvalidTheme(t *testing.T) {
 		validThemes := map[string]bool{
 			"espresso": true, "dark": true, "dracula": true, "monokai": true,
 			"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true,
-			"lavender": true, "sakura": true, "solarized": true, "light": true,
+			"lavender": true, "sakura": true, "cottoncandy": true, "solarized": true, "light": true,
 		}
 		if !validThemes[req.Theme] {
 			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid theme"})
@@ -468,7 +468,7 @@ func TestUpdateTheme_ValidTheme(t *testing.T) {
 		validThemes := map[string]bool{
 			"espresso": true, "dark": true, "dracula": true, "monokai": true,
 			"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true,
-			"lavender": true, "sakura": true, "solarized": true, "light": true,
+			"lavender": true, "sakura": true, "cottoncandy": true, "solarized": true, "light": true,
 		}
 		if !validThemes[req.Theme] {
 			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid theme"})
