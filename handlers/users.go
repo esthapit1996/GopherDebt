@@ -196,6 +196,39 @@ func (h *UserHandler) UpdateTheme(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Theme updated"})
 }
 
+func (h *UserHandler) UpdateAvatar(c *gin.Context) {
+	userID := c.GetInt("userID")
+
+	var req struct {
+		Avatar string `json:"avatar" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
+		return
+	}
+
+	// Validate avatar against known filenames
+	validAvatars := map[string]bool{
+		"camel": true, "cat": true, "dog": true, "duck": true,
+		"elephant": true, "flower": true, "gopher": true,
+		"mafia_1": true, "mafia_2": true, "monkey": true,
+		"mouse": true, "rhino": true, "": true,
+	}
+	if !validAvatars[req.Avatar] {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid avatar"})
+		return
+	}
+
+	err := db.UpdateUserAvatar(h.DB, userID, req.Avatar)
+	if err != nil {
+		log.Printf("ERROR UpdateAvatar: user %d, avatar %s: %v", userID, req.Avatar, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to update avatar"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Avatar updated"})
+}
+
 func (h *UserHandler) ChangePassword(c *gin.Context) {
 	userID := c.GetInt("userID")
 

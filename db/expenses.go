@@ -66,7 +66,7 @@ func GetExpenseByID(d *sql.DB, expenseID int) (*models.Expense, error) {
 func GetGroupExpenses(d *sql.DB, groupID int) ([]models.Expense, error) {
 	return retry("GetGroupExpenses", func() ([]models.Expense, error) {
 		rows, err := d.Query(
-			`SELECT e.id, e.group_id, e.paid_by, e.amount, e.description, e.split_type, e.created_at, e.updated_at, u.id, u.email, u.name
+			`SELECT e.id, e.group_id, e.paid_by, e.amount, e.description, e.split_type, e.created_at, e.updated_at, u.id, u.email, u.name, COALESCE(u.avatar, '')
 			 FROM expenses e LEFT JOIN users u ON e.paid_by = u.id WHERE e.group_id = $1 ORDER BY e.created_at DESC`,
 			groupID,
 		)
@@ -79,7 +79,7 @@ func GetGroupExpenses(d *sql.DB, groupID int) ([]models.Expense, error) {
 		for rows.Next() {
 			var expense models.Expense
 			var payer models.User
-			if err := rows.Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.CreatedAt, &expense.UpdatedAt, &payer.ID, &payer.Email, &payer.Name); err != nil {
+			if err := rows.Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.CreatedAt, &expense.UpdatedAt, &payer.ID, &payer.Email, &payer.Name, &payer.Avatar); err != nil {
 				return nil, err
 			}
 			expense.PaidByUser = &payer
@@ -97,7 +97,7 @@ func GetGroupExpenses(d *sql.DB, groupID int) ([]models.Expense, error) {
 func GetExpenseSplits(d *sql.DB, expenseID int) ([]models.ExpenseSplit, error) {
 	return retry("GetExpenseSplits", func() ([]models.ExpenseSplit, error) {
 		rows, err := d.Query(
-			`SELECT es.id, es.expense_id, es.user_id, es.amount, u.id, u.email, u.name
+			`SELECT es.id, es.expense_id, es.user_id, es.amount, u.id, u.email, u.name, COALESCE(u.avatar, '')
 			 FROM expense_splits es LEFT JOIN users u ON es.user_id = u.id WHERE es.expense_id = $1`,
 			expenseID,
 		)
@@ -110,7 +110,7 @@ func GetExpenseSplits(d *sql.DB, expenseID int) ([]models.ExpenseSplit, error) {
 		for rows.Next() {
 			var split models.ExpenseSplit
 			var user models.User
-			if err := rows.Scan(&split.ID, &split.ExpenseID, &split.UserID, &split.Amount, &user.ID, &user.Email, &user.Name); err != nil {
+			if err := rows.Scan(&split.ID, &split.ExpenseID, &split.UserID, &split.Amount, &user.ID, &user.Email, &user.Name, &user.Avatar); err != nil {
 				return nil, err
 			}
 			split.User = &user
@@ -127,7 +127,7 @@ func GetUnpaidExpensesForUser(d *sql.DB, groupID, userID int) ([]models.Expense,
 	return retry("GetUnpaidExpensesForUser", func() ([]models.Expense, error) {
 		rows, err := d.Query(
 			`SELECT e.id, e.group_id, e.paid_by, e.amount, e.description, e.split_type, e.created_at, e.updated_at,
-				u.id, u.email, u.name
+				u.id, u.email, u.name, COALESCE(u.avatar, '')
 			FROM expenses e
 			LEFT JOIN users u ON e.paid_by = u.id
 			INNER JOIN expense_splits es ON es.expense_id = e.id AND es.user_id = $2
@@ -146,7 +146,7 @@ func GetUnpaidExpensesForUser(d *sql.DB, groupID, userID int) ([]models.Expense,
 		for rows.Next() {
 			var expense models.Expense
 			var payer models.User
-			if err := rows.Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.CreatedAt, &expense.UpdatedAt, &payer.ID, &payer.Email, &payer.Name); err != nil {
+			if err := rows.Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.CreatedAt, &expense.UpdatedAt, &payer.ID, &payer.Email, &payer.Name, &payer.Avatar); err != nil {
 				return nil, err
 			}
 			expense.PaidByUser = &payer

@@ -139,7 +139,7 @@ func RemoveGroupMember(db *sql.DB, groupID, userID int) error {
 func GetGroupMembers(d *sql.DB, groupID int) ([]models.User, error) {
 	return retry("GetGroupMembers", func() ([]models.User, error) {
 		rows, err := d.Query(
-			`SELECT u.id, u.email, u.name, u.created_at, u.updated_at
+			`SELECT u.id, u.email, u.name, COALESCE(u.avatar, ''), u.created_at, u.updated_at
 		 FROM users u INNER JOIN group_members gm ON u.id = gm.user_id
 		 WHERE gm.group_id = $1 ORDER BY u.name`,
 			groupID,
@@ -152,7 +152,7 @@ func GetGroupMembers(d *sql.DB, groupID int) ([]models.User, error) {
 		var members []models.User
 		for rows.Next() {
 			var user models.User
-			if err := rows.Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt, &user.UpdatedAt); err != nil {
+			if err := rows.Scan(&user.ID, &user.Email, &user.Name, &user.Avatar, &user.CreatedAt, &user.UpdatedAt); err != nil {
 				return nil, err
 			}
 			members = append(members, user)
