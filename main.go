@@ -65,6 +65,7 @@ func main() {
 	suggestionHandler := handlers.NewSuggestionHandler(database)
 	currencyHandler := handlers.NewCurrencyHandler()
 	accessControlHandler := handlers.NewAccessControlHandler(database)
+	receiptHandler := handlers.NewReceiptHandler()
 
 	// Setup router
 	r := gin.Default()
@@ -184,6 +185,9 @@ func main() {
 		api.GET("/currency/rates", currencyHandler.GetRates)
 		api.GET("/currency/convert", currencyHandler.Convert)
 		api.GET("/currency/history", currencyHandler.GetHistory)
+
+		// Receipt scanning (Gemini proxy)
+		api.POST("/receipt/scan", receiptHandler.ScanReceipt)
 
 		// Access control routes (whitelist/blacklist)
 		api.GET("/whitelist", accessControlHandler.GetWhitelist)
