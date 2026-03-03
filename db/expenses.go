@@ -2,6 +2,8 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"gopherdebt/models"
 )
@@ -83,14 +85,17 @@ func GetGroupExpenses(d *sql.DB, groupID int) ([]models.Expense, error) {
 				return nil, err
 			}
 			expense.PaidByUser = &payer
-			// Fetch splits for this expense
-			splits, err := GetExpenseSplits(d, expense.ID)
-			if err == nil {
-				expense.Splits = splits
-			}
 			expenses = append(expenses, expense)
 		}
-		return expenses, rows.Err()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+
+		// Batch-fetch all splits in one query instead of N+1
+		if err := batchFetchSplits(d, expenses); err != nil {
+			return nil, err
+		}
+		return expenses, nil
 	})
 }
 
@@ -118,6 +123,51 @@ func GetExpenseSplits(d *sql.DB, expenseID int) ([]models.ExpenseSplit, error) {
 		}
 		return splits, rows.Err()
 	})
+}
+
+// batchFetchSplits loads splits for all given expenses in a single query,
+// replacing the N+1 pattern of calling GetExpenseSplits per expense.
+func batchFetchSplits(d *sql.DB, expenses []models.Expense) error {
+	if len(expenses) == 0 {
+		return nil
+	}
+
+	// Build expense ID list: $1, $2, $3, ...
+	ids := make([]interface{}, len(expenses))
+	placeholders := make([]string, len(expenses))
+	idIndex := make(map[int]int) // expense ID → index in expenses slice
+	for i, e := range expenses {
+		ids[i] = e.ID
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		idIndex[e.ID] = i
+	}
+
+	query := fmt.Sprintf(
+		`SELECT es.id, es.expense_id, es.user_id, es.amount, u.id, u.email, u.name, COALESCE(u.avatar, '')
+		 FROM expense_splits es LEFT JOIN users u ON es.user_id = u.id
+		 WHERE es.expense_id IN (%s)
+		 ORDER BY es.expense_id, es.id`,
+		strings.Join(placeholders, ", "),
+	)
+
+	rows, err := d.Query(query, ids...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var split models.ExpenseSplit
+		var user models.User
+		if err := rows.Scan(&split.ID, &split.ExpenseID, &split.UserID, &split.Amount, &user.ID, &user.Email, &user.Name, &user.Avatar); err != nil {
+			return err
+		}
+		split.User = &user
+		if idx, ok := idIndex[split.ExpenseID]; ok {
+			expenses[idx].Splits = append(expenses[idx].Splits, split)
+		}
+	}
+	return rows.Err()
 }
 
 // GetUnpaidExpensesForUser returns expenses in a group where the given user still owes money.
@@ -150,13 +200,17 @@ func GetUnpaidExpensesForUser(d *sql.DB, groupID, userID int) ([]models.Expense,
 				return nil, err
 			}
 			expense.PaidByUser = &payer
-			splits, err := GetExpenseSplits(d, expense.ID)
-			if err == nil {
-				expense.Splits = splits
-			}
 			expenses = append(expenses, expense)
 		}
-		return expenses, rows.Err()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+
+		// Batch-fetch all splits in one query instead of N+1
+		if err := batchFetchSplits(d, expenses); err != nil {
+			return nil, err
+		}
+		return expenses, nil
 	})
 }
 
