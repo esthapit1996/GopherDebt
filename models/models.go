@@ -200,7 +200,7 @@ type StashExpense struct {
 // CreateStashExpenseRequest is the payload for adding a personal expense
 type CreateStashExpenseRequest struct {
 	Amount      float64 `json:"amount" binding:"required,gt=0"`
-	Description string  `json:"description" binding:"required,max=255"`
+	Description string  `json:"description" binding:"max=255"`
 	Category    string  `json:"category" binding:"max=50"`
 }
 

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -57,7 +58,17 @@ func (h *StashHandler) CreateStashExpense(c *gin.Context) {
 		return
 	}
 
-	expense, err := db.CreateStashExpense(h.DB, userID, req.Amount, req.Description, req.Category)
+	// Default description to category name if empty
+	description := req.Description
+	if description == "" {
+		if req.Category != "" {
+			description = strings.ToUpper(req.Category[:1]) + req.Category[1:]
+		} else {
+			description = "Expense"
+		}
+	}
+
+	expense, err := db.CreateStashExpense(h.DB, userID, req.Amount, description, req.Category)
 	if err != nil {
 		log.Printf("ERROR CreateStashExpense: user %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{
