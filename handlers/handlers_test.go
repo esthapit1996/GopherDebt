@@ -429,8 +429,8 @@ func TestUpdateTheme_InvalidTheme(t *testing.T) {
 			return
 		}
 		validThemes := map[string]bool{
-			"espresso": true, "dark": true, "dracula": true, "monokai": true,
-			"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true,
+			"espresso": true, "darkknight": true, "dracula": true, "monokai": true,
+			"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true, "purplehaze": true,
 			"lavender": true, "sakura": true, "cottoncandy": true, "solarized": true, "light": true,
 		}
 		if !validThemes[req.Theme] {
@@ -466,8 +466,8 @@ func TestUpdateTheme_ValidTheme(t *testing.T) {
 			return
 		}
 		validThemes := map[string]bool{
-			"espresso": true, "dark": true, "dracula": true, "monokai": true,
-			"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true,
+			"espresso": true, "darkknight": true, "dracula": true, "monokai": true,
+			"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true, "purplehaze": true,
 			"lavender": true, "sakura": true, "cottoncandy": true, "solarized": true, "light": true,
 		}
 		if !validThemes[req.Theme] {
@@ -477,7 +477,7 @@ func TestUpdateTheme_ValidTheme(t *testing.T) {
 		c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Theme updated"})
 	})
 	token := generateTestToken(1)
-	body, _ := json.Marshal(map[string]string{"theme": "dark"})
+	body, _ := json.Marshal(map[string]string{"theme": "darkknight"})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/api/profile/theme", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")

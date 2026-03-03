@@ -84,7 +84,7 @@ func RunMigrations(db *sql.DB) error {
 		// Add emoji column to groups table
 		`ALTER TABLE groups ADD COLUMN IF NOT EXISTS emoji VARCHAR(10) DEFAULT '💰'`,
 		// Add theme_preference column to users table
-		`ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT 'dark'`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT 'darkknight'`,
 		// Suggestions table (max 20 suggestions, 800 chars each)
 		`CREATE TABLE IF NOT EXISTS suggestions (
 			id SERIAL PRIMARY KEY,
@@ -151,6 +151,8 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar VARCHAR(50) DEFAULT ''`,
 		// Add type column to suggestions table
 		`ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS type VARCHAR(30) DEFAULT 'other'`,
+		// Rename 'dark' theme to 'darkknight'
+		`UPDATE users SET theme_preference = 'darkknight' WHERE theme_preference = 'dark'`,
 	}
 
 	for i, migration := range migrations {

@@ -13,7 +13,7 @@ var ErrDuplicate = errors.New("record already exists")
 func CreateUser(db *sql.DB, email, passwordHash, name string) (*models.User, error) {
 	var user models.User
 	err := db.QueryRow(
-		`INSERT INTO users (email, password_hash, name, theme_preference, avatar) VALUES ($1, $2, $3, 'dark', '') RETURNING id, email, name, COALESCE(avatar, ''), theme_preference, created_at, updated_at`,
+		`INSERT INTO users (email, password_hash, name, theme_preference, avatar) VALUES ($1, $2, $3, 'darkknight', '') RETURNING id, email, name, COALESCE(avatar, ''), theme_preference, created_at, updated_at`,
 		email, passwordHash, name,
 	).Scan(&user.ID, &user.Email, &user.Name, &user.Avatar, &user.ThemePreference, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
@@ -26,7 +26,7 @@ func GetUserByEmail(d *sql.DB, email string) (*models.User, error) {
 	return retry("GetUserByEmail", func() (*models.User, error) {
 		var user models.User
 		err := d.QueryRow(
-			`SELECT id, email, password_hash, name, COALESCE(avatar, ''), COALESCE(theme_preference, 'dark'), created_at, updated_at FROM users WHERE email = $1`,
+			`SELECT id, email, password_hash, name, COALESCE(avatar, ''), COALESCE(theme_preference, 'darkknight'), created_at, updated_at FROM users WHERE email = $1`,
 			email,
 		).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.Avatar, &user.ThemePreference, &user.CreatedAt, &user.UpdatedAt)
 		if err == sql.ErrNoRows {
@@ -43,7 +43,7 @@ func GetUserByID(d *sql.DB, id int) (*models.User, error) {
 	return retry("GetUserByID", func() (*models.User, error) {
 		var user models.User
 		err := d.QueryRow(
-			`SELECT id, email, name, COALESCE(avatar, ''), COALESCE(theme_preference, 'dark'), created_at, updated_at FROM users WHERE id = $1`,
+			`SELECT id, email, name, COALESCE(avatar, ''), COALESCE(theme_preference, 'darkknight'), created_at, updated_at FROM users WHERE id = $1`,
 			id,
 		).Scan(&user.ID, &user.Email, &user.Name, &user.Avatar, &user.ThemePreference, &user.CreatedAt, &user.UpdatedAt)
 		if err == sql.ErrNoRows {
@@ -58,7 +58,7 @@ func GetUserByID(d *sql.DB, id int) (*models.User, error) {
 
 func GetAllUsers(d *sql.DB) ([]models.User, error) {
 	return retry("GetAllUsers", func() ([]models.User, error) {
-		rows, err := d.Query(`SELECT id, email, name, COALESCE(avatar, ''), COALESCE(theme_preference, 'dark'), created_at, updated_at FROM users ORDER BY name`)
+		rows, err := d.Query(`SELECT id, email, name, COALESCE(avatar, ''), COALESCE(theme_preference, 'darkknight'), created_at, updated_at FROM users ORDER BY name`)
 		if err != nil {
 			return nil, err
 		}
