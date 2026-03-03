@@ -2,6 +2,8 @@ package db
 
 import (
 	"database/sql"
+	"math"
+	"time"
 
 	"gopherdebt/models"
 )
@@ -402,6 +404,173 @@ func GetDebtOverview(d *sql.DB, userID int) ([]DebtOverviewItem, error) {
 		}
 
 		return result, nil
+	})
+}
+
+// DebtDetailItem represents a single expense/settlement contributing to a debt between two users
+type DebtDetailItem struct {
+	Type        string    `json:"type"` // "expense", "settlement", "payment"
+	GroupName   string    `json:"group_name"`
+	Description string    `json:"description"`
+	Amount      float64   `json:"amount"` // Positive = they owe you, Negative = you owe them
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// GetDebtDetails returns a detailed breakdown of debts between the current user and another user
+func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error) {
+	return retry("GetDebtDetails", func() ([]DebtDetailItem, error) {
+		var items []DebtDetailItem
+
+		// Get all groups the user is a member of
+		groups, err := GetUserGroups(d, userID)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, group := range groups {
+			// Expenses: where one paid and the other has a split
+			rows, err := d.Query(
+				`SELECT e.description, es.amount, e.created_at, e.paid_by
+				FROM expenses e
+				INNER JOIN expense_splits es ON e.id = es.expense_id
+				WHERE e.group_id = $1
+				AND (
+					(e.paid_by = $2 AND es.user_id = $3)
+					OR (e.paid_by = $3 AND es.user_id = $2)
+				)`,
+				group.ID, userID, otherUserID,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			func() {
+				defer rows.Close()
+				for rows.Next() {
+					var desc string
+					var amount float64
+					var createdAt time.Time
+					var paidBy int
+					if err := rows.Scan(&desc, &amount, &createdAt, &paidBy); err != nil {
+						continue
+					}
+					// If I paid and they have a split → they owe me (positive)
+					// If they paid and I have a split → I owe them (negative)
+					if paidBy == userID {
+						items = append(items, DebtDetailItem{
+							Type:        "expense",
+							GroupName:   group.Name,
+							Description: desc,
+							Amount:      amount,
+							CreatedAt:   createdAt,
+						})
+					} else {
+						items = append(items, DebtDetailItem{
+							Type:        "expense",
+							GroupName:   group.Name,
+							Description: desc,
+							Amount:      -amount,
+							CreatedAt:   createdAt,
+						})
+					}
+				}
+			}()
+
+			// Settlements between the two users
+			settlementRows, err := d.Query(
+				`SELECT amount, created_at, paid_by
+				FROM settlements
+				WHERE group_id = $1
+				AND ((paid_by = $2 AND paid_to = $3) OR (paid_by = $3 AND paid_to = $2))`,
+				group.ID, userID, otherUserID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			func() {
+				defer settlementRows.Close()
+				for settlementRows.Next() {
+					var amount float64
+					var createdAt time.Time
+					var paidBy int
+					if err := settlementRows.Scan(&amount, &createdAt, &paidBy); err != nil {
+						continue
+					}
+					// If I paid them → they owe me more (positive = reducing what I owe)
+					// If they paid me → I owe them more
+					if paidBy == userID {
+						items = append(items, DebtDetailItem{
+							Type:        "settlement",
+							GroupName:   group.Name,
+							Description: "Settlement",
+							Amount:      amount,
+							CreatedAt:   createdAt,
+						})
+					} else {
+						items = append(items, DebtDetailItem{
+							Type:        "settlement",
+							GroupName:   group.Name,
+							Description: "Settlement",
+							Amount:      -amount,
+							CreatedAt:   createdAt,
+						})
+					}
+				}
+			}()
+
+			// Expense payments between the two users
+			paymentRows, err := d.Query(
+				`SELECT ep.amount, ep.created_at, ep.paid_by, e.description
+				FROM expense_payments ep
+				INNER JOIN expenses e ON ep.expense_id = e.id
+				WHERE e.group_id = $1
+				AND ((ep.paid_by = $2 AND e.paid_by = $3) OR (ep.paid_by = $3 AND e.paid_by = $2))`,
+				group.ID, userID, otherUserID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			func() {
+				defer paymentRows.Close()
+				for paymentRows.Next() {
+					var amount float64
+					var createdAt time.Time
+					var paidBy int
+					var expenseDesc string
+					if err := paymentRows.Scan(&amount, &createdAt, &paidBy, &expenseDesc); err != nil {
+						continue
+					}
+					desc := "Payment: " + expenseDesc
+					if paidBy == userID {
+						items = append(items, DebtDetailItem{
+							Type:        "payment",
+							GroupName:   group.Name,
+							Description: desc,
+							Amount:      amount,
+							CreatedAt:   createdAt,
+						})
+					} else {
+						items = append(items, DebtDetailItem{
+							Type:        "payment",
+							GroupName:   group.Name,
+							Description: desc,
+							Amount:      -amount,
+							CreatedAt:   createdAt,
+						})
+					}
+				}
+			}()
+		}
+
+		// Filter out items that round to zero
+		var filtered []DebtDetailItem
+		for _, item := range items {
+			if math.Abs(item.Amount) >= 0.01 {
+				filtered = append(filtered, item)
+			}
+		}
+
+		return filtered, nil
 	})
 }
 

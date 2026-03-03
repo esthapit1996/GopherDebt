@@ -128,6 +128,7 @@ func main() {
 		api.GET("/users", userHandler.GetAllUsers)
 		api.DELETE("/users/:id", userHandler.DeleteUser)
 		api.GET("/debt-overview", userHandler.GetDebtOverview)
+		api.GET("/debt-overview/:userId", userHandler.GetDebtDetails)
 		api.GET("/payment-history", userHandler.GetPaymentHistory)
 		api.DELETE("/payment-history", userHandler.ClearPaymentHistory)
 		api.PUT("/profile/theme", userHandler.UpdateTheme)

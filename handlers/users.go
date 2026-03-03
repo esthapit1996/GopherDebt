@@ -142,6 +142,23 @@ func (h *UserHandler) GetDebtOverview(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: overview})
 }
 
+func (h *UserHandler) GetDebtDetails(c *gin.Context) {
+	userID := c.GetInt("userID")
+	otherUserID, err := strconv.Atoi(c.Param("userId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid user ID"})
+		return
+	}
+
+	details, err := db.GetDebtDetails(h.DB, userID, otherUserID)
+	if err != nil {
+		log.Printf("ERROR GetDebtDetails: user %d, other %d: %v", userID, otherUserID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch debt details"})
+		return
+	}
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: details})
+}
+
 func (h *UserHandler) GetPaymentHistory(c *gin.Context) {
 	userID := c.GetInt("userID")
 	history, err := db.GetPaymentHistory(h.DB, userID)
