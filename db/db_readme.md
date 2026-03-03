@@ -23,6 +23,10 @@ This folder contains all database operations for GopherDebt. Each file handles C
 | `settlements.go` | Direct payments between users + balance calculation |
 | `expense_payments.go` | Partial payments toward specific expenses |
 | `activity.go` | Activity logging for group history |
+| `suggestions.go` | Suggestion box with voting and comments |
+| `stash.go` | GopherStash personal expense tracking |
+| `access_control.go` | Email whitelist/blacklist management |
+| `retry.go` | Generic retry with backoff for transient DB errors |
 | `migrations.go` | Database schema creation and updates |
 
 ---
@@ -168,6 +172,10 @@ For each expense_payment:
 | `activity_log` | History of all actions in a group |
 | `suggestions` | User feature suggestions |
 | `suggestion_votes` | Anonymous voting on suggestions |
+| `suggestion_comments` | Comments on suggestions |
+| `stash_expenses` | GopherStash personal expenses |
+| `email_whitelist` | Approved registration emails |
+| `email_blacklist` | Blocked registration emails |
 
 ---
 
@@ -205,4 +213,67 @@ if err == sql.ErrNoRows {
 if err != nil {
     return nil, err  // Other database errors
 }
+```
+
+---
+
+## 🔧 stash.go
+
+### Functions
+
+| Function | Parameters | Returns | Description |
+|----------|------------|---------|-------------|
+| `CreateStashExpense` | `db *sql.DB, userID int, amount float64, description, category string` | `*models.StashExpense, error` | Adds a personal expense to the user's stash |
+| `GetStashExpenses` | `db *sql.DB, userID int` | `[]models.StashExpense, error` | Returns all personal expenses for a user (newest first) |
+| `DeleteStashExpense` | `db *sql.DB, expenseID, userID int` | `error` | Removes a personal expense (only if owned by user) |
+| `GetStashSummary` | `db *sql.DB, userID int` | `*models.StashSummary, error` | Total spent + breakdown by category |
+| `ClearStashExpenses` | `db *sql.DB, userID int` | `error` | Removes all personal expenses for a user |
+
+---
+
+## 🔧 access_control.go
+
+### Types
+
+| Type | Purpose |
+|------|---------|
+| `WhitelistEntry` | Represents an approved email with metadata |
+| `BlacklistEntry` | Represents a blocked email with reason |
+
+### Functions
+
+| Function | Parameters | Returns | Description |
+|----------|------------|---------|-------------|
+| `IsEmailWhitelisted` | `db *sql.DB, email string` | `bool, error` | Checks if email is in the whitelist |
+| `IsEmailBlacklisted` | `db *sql.DB, email string` | `bool, error` | Checks if email is in the blacklist |
+| `GetWhitelist` | `db *sql.DB` | `[]WhitelistEntry, error` | Returns all whitelisted emails |
+| `GetBlacklist` | `db *sql.DB` | `[]BlacklistEntry, error` | Returns all blacklisted emails |
+| `AddToWhitelist` | `db *sql.DB, email string, addedBy int` | `*WhitelistEntry, error` | Adds email to whitelist |
+| `AddToBlacklist` | `db *sql.DB, email, reason string, addedBy int` | `*BlacklistEntry, error` | Adds email to blacklist |
+| `RemoveFromWhitelist` | `db *sql.DB, id int` | `error` | Removes entry from whitelist |
+| `RemoveFromBlacklist` | `db *sql.DB, id int` | `error` | Removes entry from blacklist |
+
+---
+
+## 🔧 retry.go
+
+### Constants
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `maxRetries` | `3` | Number of retry attempts for transient errors |
+
+### Functions
+
+| Function | Parameters | Returns | Description |
+|----------|------------|---------|-------------|
+| `retry[T]` | `label string, fn func() (T, error)` | `T, error` | Generic retry with backoff (150ms, 300ms). Skips retry for `ErrNotFound`/`ErrDuplicate` |
+
+### How It Works
+```
+1. Execute fn()
+2. If success → return result
+3. If ErrNotFound or ErrDuplicate → return immediately (not transient)
+4. If other error → log, wait 150ms × attempt, retry
+5. After 3 failures → log and return last error
 ```

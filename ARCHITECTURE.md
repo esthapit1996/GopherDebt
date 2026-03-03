@@ -13,6 +13,9 @@ This document explains how the Go backend is structured and how all the pieces f
 | **jwt-go** | `github.com/golang-jwt/jwt/v5` | JSON Web Token creation and validation |
 | **bcrypt** | `golang.org/x/crypto/bcrypt` | Password hashing |
 | **database/sql** | stdlib | Database interface |
+| **sync** | stdlib | Thread-safe caching (rate limiter, currency cache) |
+| **encoding/json** | stdlib | Parse JSON from external APIs |
+| **encoding/base64** | stdlib | Encode receipt images for Gemini API |
 
 ---
 
@@ -23,6 +26,8 @@ GopherDebt/
 ├── main.go              # Entry point - sets up everything
 ├── go.mod               # Go module dependencies
 ├── gopherdebt           # Compiled binary
+├── Dockerfile           # Multi-stage Docker build for Fly.io
+├── fly.toml             # Fly.io deployment config
 ├── db/                  # Database layer
 │   ├── db_readme.md     # 📖 Documentation
 │   ├── users.go         # User CRUD
@@ -31,9 +36,14 @@ GopherDebt/
 │   ├── settlements.go   # Settlements + balance calculation
 │   ├── expense_payments.go  # Partial expense payments
 │   ├── activity.go      # Activity logging
+│   ├── suggestions.go   # Suggestion box
+│   ├── stash.go         # GopherStash personal expenses
+│   ├── access_control.go # Email whitelist/blacklist
+│   ├── retry.go         # Generic retry with backoff
 │   └── migrations.go    # Schema creation
 ├── handlers/            # HTTP endpoint controllers
 │   ├── handlers_readme.md   # 📖 Documentation
+│   ├── handlers_test.go # 31 handler tests
 │   ├── users.go         # Auth & profile endpoints
 │   ├── groups.go        # Group endpoints
 │   ├── expenses.go      # Expense endpoints
@@ -41,10 +51,15 @@ GopherDebt/
 │   ├── expense_payments.go  # Payment endpoints
 │   ├── activity.go      # Activity feed endpoints
 │   ├── suggestions.go   # Suggestion box endpoints
-│   └── currency.go      # Currency conversion endpoints
+│   ├── currency.go      # Currency conversion endpoints
+│   ├── stash.go         # GopherStash endpoints
+│   ├── access_control.go # Whitelist/blacklist (founder only)
+│   └── receipt.go       # AI receipt scanning (Gemini proxy)
 ├── middleware/          # Request processing
 │   ├── middleware_readme.md # 📖 Documentation
-│   └── auth.go          # JWT authentication
+│   ├── auth.go          # JWT authentication
+│   ├── auth_test.go     # Auth middleware tests
+│   └── rate_limit.go    # Per-IP rate limiting
 └── models/              # Data structures
     ├── models_readme.md # 📖 Documentation
     └── models.go        # All model definitions
@@ -55,12 +70,12 @@ GopherDebt/
 ## 🔄 Request Flow
 
 ```
-┌─────────┐     ┌──────────┐     ┌────────────┐     ┌─────────┐     ┌──────────┐
-│ Frontend │ ──► │   Gin    │ ──► │ Middleware │ ──► │ Handler │ ──► │ Database │
-│ (React)  │ ◄── │  Router  │ ◄── │   (Auth)   │ ◄── │         │ ◄── │  Layer   │
-└─────────┘     └──────────┘     └────────────┘     └─────────┘     └──────────┘
-    JSON            Routes           JWT              Business       SQL Queries
-   Request         Matching        Validation          Logic
+┌─────────┐     ┌──────────┐     ┌────────────┐     ┌────────────┐     ┌─────────┐     ┌──────────┐
+│ Frontend │ ──► │   Gin    │ ──► │   Rate     │ ──► │ Middleware │ ──► │ Handler │ ──► │ Database │
+│ (React)  │ ◄── │  Router  │ ◄── │  Limiter   │ ◄── │   (Auth)   │ ◄── │         │ ◄── │  Layer   │
+└─────────┘     └──────────┘     └────────────┘     └────────────┘     └─────────┘     └──────────┘
+    JSON            Routes          Per-IP              JWT              Business       SQL Queries
+   Request         Matching        Throttle           Validation          Logic        + Retry Logic
 ```
 
 ---
@@ -84,6 +99,8 @@ Creates all tables if they don't exist (safe to run multiple times).
 ```go
 userHandler := handlers.NewUserHandler(database)
 groupHandler := handlers.NewGroupHandler(database)
+stashHandler := handlers.NewStashHandler(database)
+receiptHandler := handlers.NewReceiptHandler()
 // ... each handler gets the database connection
 ```
 Handlers are structs that hold the DB connection and have methods for each endpoint.
@@ -94,14 +111,22 @@ r := gin.Default()
 ```
 Creates a Gin router with default middleware (logging, recovery).
 
-### 5. CORS Middleware
+### 5. CORS & Cache Prevention Middleware
 ```go
 r.Use(func(c *gin.Context) {
     c.Header("Access-Control-Allow-Origin", "*")
+    c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
     // ... other headers
 })
 ```
-Allows frontend (on different port) to make requests.
+Allows frontend (on different domain) to make requests and prevents stale cached responses.
+
+### 6. Rate Limiting
+```go
+authLimiter := middleware.NewRateLimiter(10, time.Minute)  // 10 req/min for auth
+apiLimiter := middleware.NewRateLimiter(100, time.Minute)   // 100 req/min for API
+```
+Per-IP rate limiting with automatic cleanup of stale entries.
 
 ### 6. Public Routes
 ```go
@@ -165,6 +190,17 @@ Starts listening for HTTP requests.
 │ amount          │    │ amount            │
 └─────────────────┘    │ note              │
                        └───────────────────┘
+
+┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+│ stash_expenses   │   │ email_whitelist  │   │ email_blacklist  │
+├──────────────────┤   ├──────────────────┤   ├──────────────────┤
+│ id (PK)          │   │ id (PK)          │   │ id (PK)          │
+│ user_id (FK)     │   │ email            │   │ email            │
+│ amount           │   │ added_by (FK)    │   │ reason           │
+│ description      │   │ created_at       │   │ added_by (FK)    │
+│ category         │   └──────────────────┘   │ created_at       │
+│ created_at       │                          └──────────────────┘
+└──────────────────┘
 ```
 
 ---

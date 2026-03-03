@@ -18,6 +18,8 @@ Middleware functions run **before** your handlers. They can validate requests, a
 | File | Purpose |
 |------|---------|
 | `auth.go` | JWT authentication middleware |
+| `rate_limit.go` | Per-IP rate limiting middleware |
+| `auth_test.go` | Authentication middleware tests |
 
 ---
 
@@ -112,3 +114,50 @@ Routes inside the `protected` group will **automatically** run through `AuthMidd
 ```
 
 The token is signed with HMAC-SHA256 using `JWT_SECRET`.
+
+---
+
+## 🔧 rate_limit.go
+
+### Struct
+
+```go
+type RateLimiter struct {
+    visitors map[string]*visitor  // Per-IP request tracking
+    mu       sync.Mutex           // Thread-safe access
+    limit    int                  // Max requests per window
+    window   time.Duration        // Time window
+}
+```
+
+### Functions
+
+| Function | Parameters | Returns | Description |
+|----------|------------|---------|-------------|
+| `NewRateLimiter` | `limit int, window time.Duration` | `*RateLimiter` | Creates rate limiter with background cleanup goroutine |
+| `Middleware()` | — | `gin.HandlerFunc` | Returns Gin middleware that enforces per-IP rate limit |
+
+### How It Works
+
+```
+1. Request comes in from IP address
+2. Check if IP has an active window
+3. If new IP or window expired → start fresh window (count = 1)
+4. If count < limit → increment count, allow request
+5. If count >= limit → return 429 Too Many Requests
+6. Background goroutine cleans stale entries every minute
+```
+
+### Usage in main.go
+
+```go
+authLimiter := middleware.NewRateLimiter(10, time.Minute)   // Strict: 10/min for login/register
+apiLimiter := middleware.NewRateLimiter(100, time.Minute)    // Normal: 100/min for API routes
+
+r.POST("/api/register", authLimiter.Middleware(), userHandler.Register)
+r.POST("/api/login", authLimiter.Middleware(), userHandler.Login)
+
+api := r.Group("/api")
+api.Use(middleware.AuthMiddleware())
+api.Use(apiLimiter.Middleware())
+```

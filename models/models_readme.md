@@ -192,6 +192,14 @@ These define the expected JSON payload for API requests.
 | `Amount` | `float64` | `required,gt=0` | Payment amount |
 | `Note` | `string` | - | Optional note |
 
+### CreateStashExpenseRequest
+
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `Amount` | `float64` | `required,gt=0` | Must be positive |
+| `Description` | `string` | `max=255` | Optional (defaults to category name or "Expense") |
+| `Category` | `string` | `max=50` | Optional category tag |
+
 ---
 
 ## 📤 Response Models
@@ -218,6 +226,25 @@ These define the expected JSON payload for API requests.
 |-------|------|----------|-------------|
 | `TotalOwed` | `float64` | `total_owed` | Total amount owed on expense |
 | `TotalPaid` | `float64` | `total_paid` | Total amount paid so far |
+
+### StashExpense (GopherStash)
+
+| Field | Type | JSON Tag | Description |
+|-------|------|----------|-------------|
+| `ID` | `int` | `id` | Primary key |
+| `UserID` | `int` | `user_id` | Owner of this expense |
+| `Amount` | `float64` | `amount` | Expense amount |
+| `Description` | `string` | `description` | What the expense was for |
+| `Category` | `string` | `category` | Category (food, transport, etc.) |
+| `CreatedAt` | `time.Time` | `created_at` | When expense was added |
+
+### StashSummary
+
+| Field | Type | JSON Tag | Description |
+|-------|------|----------|-------------|
+| `TotalSpent` | `float64` | `total_spent` | Sum of all expenses |
+| `ExpenseCount` | `int` | `expense_count` | Number of expenses |
+| `ByCategory` | `map[string]float64` | `by_category` | Total per category |
 
 ---
 

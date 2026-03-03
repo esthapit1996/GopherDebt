@@ -29,6 +29,10 @@ Handlers are the **HTTP endpoint controllers**. They receive requests from the f
 | `activity.go` | Activity feed | `/api/groups/:id/activities` |
 | `suggestions.go` | Feature suggestions | `/api/suggestions/*` |
 | `currency.go` | Currency conversion | `/api/currency/*` |
+| `stash.go` | GopherStash personal expenses | `/api/stash/*` |
+| `access_control.go` | Email whitelist/blacklist | `/api/whitelist/*`, `/api/blacklist/*` |
+| `receipt.go` | AI receipt scanning | `/api/receipt/scan` |
+| `handlers_test.go` | 31 handler tests | — |
 
 ---
 
@@ -227,3 +231,85 @@ groupID, _ := strconv.Atoi(c.Param("id"))        // From URL path
 amount := c.Query("amount")                       // From query string
 base := c.DefaultQuery("base", "USD")            // With default
 ```
+
+---
+
+## 🔧 stash.go
+
+### Handler Struct
+
+```go
+type StashHandler struct {
+    DB *sql.DB
+}
+```
+
+### Endpoints
+
+| Method | Endpoint | Function | Description |
+|--------|----------|----------|-------------|
+| GET | `/api/stash` | `GetStashExpenses` | Get all personal expenses (newest first) |
+| POST | `/api/stash` | `CreateStashExpense` | Add personal expense (description defaults to category name if empty) |
+| DELETE | `/api/stash/:id` | `DeleteStashExpense` | Delete a personal expense (owner only) |
+| GET | `/api/stash/summary` | `GetStashSummary` | Total spent + count + breakdown by category |
+| DELETE | `/api/stash` | `ClearStashExpenses` | Clear all personal expenses |
+
+### Default Description Logic
+
+When description is empty:
+- If category is provided → capitalize category name (e.g., `"food"` → `"Food"`)
+- If no category → default to `"Expense"`
+
+---
+
+## 🔧 access_control.go
+
+### Handler Struct
+
+```go
+type AccessControlHandler struct {
+    DB *sql.DB
+}
+```
+
+### Endpoints (Founder Only)
+
+All access control endpoints verify the requester is the founder before proceeding.
+
+| Method | Endpoint | Function | Description |
+|--------|----------|----------|-------------|
+| GET | `/api/whitelist` | `GetWhitelist` | List all whitelisted emails |
+| POST | `/api/whitelist` | `AddToWhitelist` | Add email to whitelist |
+| DELETE | `/api/whitelist/:id` | `RemoveFromWhitelist` | Remove from whitelist |
+| GET | `/api/blacklist` | `GetBlacklist` | List all blacklisted emails |
+| POST | `/api/blacklist` | `AddToBlacklist` | Add email to blacklist (cannot blacklist founder) |
+| DELETE | `/api/blacklist/:id` | `RemoveFromBlacklist` | Remove from blacklist |
+
+---
+
+## 🔧 receipt.go
+
+### Handler Struct
+
+```go
+type ReceiptHandler struct{}  // No DB needed — uses external API only
+```
+
+### Endpoints
+
+| Method | Endpoint | Function | Description |
+|--------|----------|----------|-------------|
+| POST | `/api/receipt/scan` | `ScanReceipt` | Upload receipt image → AI extracts items & total |
+
+### How It Works
+
+```
+1. Receive multipart form with "image" file
+2. Read file bytes and encode to base64
+3. Send to Google Gemini API (gemini-2.5-flash)
+4. Gemini extracts: store_name, items (name + price), total
+5. Return structured JSON to frontend
+```
+
+- Receipts in any language are supported (Gemini translates item names to English)
+- Requires `GEMINI_API_KEY` environment variable
