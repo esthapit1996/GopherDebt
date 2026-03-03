@@ -13,7 +13,7 @@ type Suggestion struct {
 	UserEmail    string    `json:"user_email"`
 	Content      string    `json:"content"`
 	Type         string    `json:"type"`   // "feature", "bug", "theme", "change", "complaint", "praise", "ux", "other"
-	Status       string    `json:"status"` // "open", "wip", "done"
+	Status       string    `json:"status"` // "open", "wip", "done", "denied"
 	CreatedAt    time.Time `json:"created_at"`
 	Likes        int       `json:"likes"`
 	Dislikes     int       `json:"dislikes"`
@@ -176,7 +176,7 @@ func GetSuggestionVotes(db *sql.DB, suggestionID int) ([]Vote, error) {
 	return votes, nil
 }
 
-// UpdateSuggestionStatus updates the status of a suggestion (open, wip, done)
+// UpdateSuggestionStatus updates the status of a suggestion (open, wip, done, denied)
 func UpdateSuggestionStatus(db *sql.DB, suggestionID int, status string) error {
 	_, err := db.Exec("UPDATE suggestions SET status = $1 WHERE id = $2", status, suggestionID)
 	return err
