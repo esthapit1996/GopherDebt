@@ -195,7 +195,7 @@ func (h *UserHandler) UpdateTheme(c *gin.Context) {
 	// Validate theme
 	validThemes := map[string]bool{
 		"espresso": true, "dark": true, "dracula": true, "monokai": true,
-		"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true,
+		"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true, "purplehaze": true,
 		"lavender": true, "sakura": true, "cottoncandy": true, "solarized": true, "light": true,
 	}
 	if !validThemes[req.Theme] {
