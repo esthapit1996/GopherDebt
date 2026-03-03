@@ -112,63 +112,31 @@ func UpdateUserPassword(db *sql.DB, userID int, newPasswordHash string) error {
 
 const FounderEmail = "evansthapit20@gmail.com"
 
-func DeleteUser(db *sql.DB, userID int) error {
+func DeleteUser(d *sql.DB, userID int) error {
+	tx, err := d.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	// Delete in proper order to satisfy foreign key constraints
-	// First delete user's expense payments
-	_, err := db.Exec(`DELETE FROM expense_payments WHERE paid_by = $1`, userID)
-	if err != nil {
-		return err
+	deletes := []string{
+		`DELETE FROM expense_payments WHERE paid_by = $1`,
+		`DELETE FROM expense_splits WHERE user_id = $1`,
+		`DELETE FROM expenses WHERE paid_by = $1`,
+		`DELETE FROM settlements WHERE paid_by = $1 OR paid_to = $1`,
+		`DELETE FROM suggestion_votes WHERE user_id = $1`,
+		`DELETE FROM suggestion_comments WHERE user_id = $1`,
+		`DELETE FROM suggestions WHERE user_id = $1`,
+		`DELETE FROM group_members WHERE user_id = $1`,
+		`DELETE FROM groups WHERE created_by = $1`,
+		`DELETE FROM users WHERE id = $1`,
+	}
+	for _, q := range deletes {
+		if _, err := tx.Exec(q, userID); err != nil {
+			return err
+		}
 	}
 
-	// Delete expense splits where user is involved
-	_, err = db.Exec(`DELETE FROM expense_splits WHERE user_id = $1`, userID)
-	if err != nil {
-		return err
-	}
-
-	// Delete user's expenses
-	_, err = db.Exec(`DELETE FROM expenses WHERE paid_by = $1`, userID)
-	if err != nil {
-		return err
-	}
-
-	// Delete settlements involving user
-	_, err = db.Exec(`DELETE FROM settlements WHERE paid_by = $1 OR paid_to = $1`, userID)
-	if err != nil {
-		return err
-	}
-
-	// Delete user's suggestion votes
-	_, err = db.Exec(`DELETE FROM suggestion_votes WHERE user_id = $1`, userID)
-	if err != nil {
-		return err
-	}
-
-	// Delete user's suggestion comments
-	_, err = db.Exec(`DELETE FROM suggestion_comments WHERE user_id = $1`, userID)
-	if err != nil {
-		return err
-	}
-
-	// Delete user's suggestions
-	_, err = db.Exec(`DELETE FROM suggestions WHERE user_id = $1`, userID)
-	if err != nil {
-		return err
-	}
-
-	// Delete group memberships
-	_, err = db.Exec(`DELETE FROM group_members WHERE user_id = $1`, userID)
-	if err != nil {
-		return err
-	}
-
-	// Delete groups created by user
-	_, err = db.Exec(`DELETE FROM groups WHERE created_by = $1`, userID)
-	if err != nil {
-		return err
-	}
-
-	// Finally delete the user
-	_, err = db.Exec(`DELETE FROM users WHERE id = $1`, userID)
-	return err
+	return tx.Commit()
 }

@@ -52,16 +52,9 @@ func (h *ExpensePaymentHandler) CreateExpensePayment(c *gin.Context) {
 		return
 	}
 
-	// Get what this user owes for this expense
-	splits, err := db.GetExpenseSplits(h.DB, expenseID)
-	if err != nil {
-		log.Printf("ERROR CreateExpensePayment: GetExpenseSplits %d: %v", expenseID, err)
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to get expense splits"})
-		return
-	}
-
+	// Get what this user owes for this expense (splits already loaded by GetExpenseByID)
 	var userOwes float64
-	for _, split := range splits {
+	for _, split := range expense.Splits {
 		if split.UserID == userID {
 			userOwes = split.Amount
 			break

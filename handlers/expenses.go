@@ -49,16 +49,22 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 
 	var splits []models.ExpenseSplitInput
 
+	// Fetch group members once — used for equal splits AND membership validation
+	groupMembers, err := db.GetGroupMembers(h.DB, groupID)
+	if err != nil {
+		log.Printf("ERROR CreateExpense: GetGroupMembers for group %d: %v", groupID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to get group members"})
+		return
+	}
+	memberSet := make(map[int]bool, len(groupMembers))
+	for _, m := range groupMembers {
+		memberSet[m.ID] = true
+	}
+
 	switch req.SplitType {
 	case "equal":
-		members, err := db.GetGroupMembers(h.DB, groupID)
-		if err != nil {
-			log.Printf("ERROR CreateExpense: GetGroupMembers for group %d: %v", groupID, err)
-			c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to get group members"})
-			return
-		}
 		// Round each share to 2 decimal places; give rounding remainder to payer
-		n := len(members)
+		n := len(groupMembers)
 		perPerson := math.Floor(req.Amount/float64(n)*100) / 100
 		assigned := perPerson * float64(n)
 		remainder := math.Round((req.Amount-assigned)*100) / 100
@@ -69,7 +75,7 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 			payerID = req.PaidBy
 		}
 
-		for _, member := range members {
+		for _, member := range groupMembers {
 			amt := perPerson
 			if member.ID == payerID {
 				amt = math.Round((perPerson+remainder)*100) / 100
@@ -132,14 +138,9 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 		return
 	}
 
+	// Validate all split users are group members (in-memory check)
 	for _, split := range splits {
-		isMember, err := db.IsGroupMember(h.DB, groupID, split.UserID)
-		if err != nil {
-			log.Printf("ERROR CreateExpense: IsGroupMember split user %d, group %d: %v", split.UserID, groupID, err)
-			c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify split member"})
-			return
-		}
-		if !isMember {
+		if !memberSet[split.UserID] {
 			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "All users in split must be group members"})
 			return
 		}
@@ -147,15 +148,9 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 
 	// Determine who paid: use req.PaidBy if provided, otherwise the logged-in user
 	payer := userID
+	// Verify the payer is a group member (use memberSet already built)
 	if req.PaidBy > 0 {
-		// Verify the payer is a group member
-		payerIsMember, err := db.IsGroupMember(h.DB, groupID, req.PaidBy)
-		if err != nil {
-			log.Printf("ERROR CreateExpense: IsGroupMember payer %d, group %d: %v", req.PaidBy, groupID, err)
-			c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify payer membership"})
-			return
-		}
-		if !payerIsMember {
+		if !memberSet[req.PaidBy] {
 			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Payer must be a group member"})
 			return
 		}

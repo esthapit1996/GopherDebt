@@ -157,6 +157,12 @@ func RunMigrations(db *sql.DB) error {
 		`UPDATE users SET theme_preference = 'flashbang' WHERE theme_preference = 'light'`,
 		// Add language column to users table
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'en'`,
+		// Performance indexes for common WHERE/JOIN columns
+		`CREATE INDEX IF NOT EXISTS idx_expense_splits_user_id ON expense_splits(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_expenses_paid_by ON expenses(paid_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_settlements_paid_by ON settlements(paid_by)`,
+		`CREATE INDEX IF NOT EXISTS idx_settlements_paid_to ON settlements(paid_to)`,
+		`CREATE INDEX IF NOT EXISTS idx_expense_payments_paid_by ON expense_payments(paid_by)`,
 	}
 
 	for i, migration := range migrations {

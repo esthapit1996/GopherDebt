@@ -193,79 +193,22 @@ func CalculateGroupBalances(d *sql.DB, groupID int) ([]models.Balance, error) {
 
 func GetUserBalanceInGroup(d *sql.DB, groupID, userID int) (float64, error) {
 	return retry("GetUserBalanceInGroup", func() (float64, error) {
-		var balance float64 = 0
-
-		var paidTotal sql.NullFloat64
-		err := d.QueryRow(`SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE group_id = $1 AND paid_by = $2`, groupID, userID).Scan(&paidTotal)
-		if err != nil {
-			return 0, err
-		}
-		if paidTotal.Valid {
-			balance += paidTotal.Float64
-		}
-
-		var owesTotal sql.NullFloat64
-		err = d.QueryRow(
-			`SELECT COALESCE(SUM(es.amount), 0) FROM expense_splits es INNER JOIN expenses e ON es.expense_id = e.id WHERE e.group_id = $1 AND es.user_id = $2`,
+		var paidTotal, owesTotal, settlementsPaid, settlementsReceived, paymentsMade, paymentsReceived float64
+		err := d.QueryRow(
+			`SELECT
+				COALESCE((SELECT SUM(amount) FROM expenses WHERE group_id = $1 AND paid_by = $2), 0),
+				COALESCE((SELECT SUM(es.amount) FROM expense_splits es INNER JOIN expenses e ON es.expense_id = e.id WHERE e.group_id = $1 AND es.user_id = $2), 0),
+				COALESCE((SELECT SUM(amount) FROM settlements WHERE group_id = $1 AND paid_by = $2), 0),
+				COALESCE((SELECT SUM(amount) FROM settlements WHERE group_id = $1 AND paid_to = $2), 0),
+				COALESCE((SELECT SUM(ep.amount) FROM expense_payments ep INNER JOIN expenses e ON ep.expense_id = e.id WHERE e.group_id = $1 AND ep.paid_by = $2), 0),
+				COALESCE((SELECT SUM(ep.amount) FROM expense_payments ep INNER JOIN expenses e ON ep.expense_id = e.id WHERE e.group_id = $1 AND e.paid_by = $2), 0)`,
 			groupID, userID,
-		).Scan(&owesTotal)
+		).Scan(&paidTotal, &owesTotal, &settlementsPaid, &settlementsReceived, &paymentsMade, &paymentsReceived)
 		if err != nil {
 			return 0, err
 		}
-		if owesTotal.Valid {
-			balance -= owesTotal.Float64
-		}
 
-		var settlementsPaid sql.NullFloat64
-		err = d.QueryRow(`SELECT COALESCE(SUM(amount), 0) FROM settlements WHERE group_id = $1 AND paid_by = $2`, groupID, userID).Scan(&settlementsPaid)
-		if err != nil {
-			return 0, err
-		}
-		if settlementsPaid.Valid {
-			balance += settlementsPaid.Float64
-		}
-
-		var settlementsReceived sql.NullFloat64
-		err = d.QueryRow(`SELECT COALESCE(SUM(amount), 0) FROM settlements WHERE group_id = $1 AND paid_to = $2`, groupID, userID).Scan(&settlementsReceived)
-		if err != nil {
-			return 0, err
-		}
-		if settlementsReceived.Valid {
-			balance -= settlementsReceived.Float64
-		}
-
-		// Factor in expense payments made by this user (payments they made to repay someone)
-		var paymentsMade sql.NullFloat64
-		err = d.QueryRow(
-			`SELECT COALESCE(SUM(ep.amount), 0) 
-			FROM expense_payments ep 
-			INNER JOIN expenses e ON ep.expense_id = e.id 
-			WHERE e.group_id = $1 AND ep.paid_by = $2`,
-			groupID, userID,
-		).Scan(&paymentsMade)
-		if err != nil {
-			return 0, err
-		}
-		if paymentsMade.Valid {
-			balance += paymentsMade.Float64
-		}
-
-		// Factor in expense payments received by this user (payments received as the original expense payer)
-		var paymentsReceived sql.NullFloat64
-		err = d.QueryRow(
-			`SELECT COALESCE(SUM(ep.amount), 0) 
-			FROM expense_payments ep 
-			INNER JOIN expenses e ON ep.expense_id = e.id 
-			WHERE e.group_id = $1 AND e.paid_by = $2`,
-			groupID, userID,
-		).Scan(&paymentsReceived)
-		if err != nil {
-			return 0, err
-		}
-		if paymentsReceived.Valid {
-			balance -= paymentsReceived.Float64
-		}
-
+		balance := paidTotal - owesTotal + settlementsPaid - settlementsReceived + paymentsMade - paymentsReceived
 		return balance, nil
 	})
 }

@@ -279,17 +279,6 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 		return
 	}
 
-	_, err = db.GetGroupByID(h.DB, groupID)
-	if err == db.ErrNotFound {
-		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Group not found"})
-		return
-	}
-	if err != nil {
-		log.Printf("ERROR DeleteGroup: GetGroupByID %d: %v", groupID, err)
-		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch group"})
-		return
-	}
-
 	// Check if all balances are settled
 	isSettled, err := db.IsGroupSettled(h.DB, groupID)
 	if err != nil {
