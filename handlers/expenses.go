@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 
@@ -56,9 +57,24 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to get group members"})
 			return
 		}
-		splitAmount := req.Amount / float64(len(members))
+		// Round each share to 2 decimal places; give rounding remainder to payer
+		n := len(members)
+		perPerson := math.Floor(req.Amount/float64(n)*100) / 100
+		assigned := perPerson * float64(n)
+		remainder := math.Round((req.Amount-assigned)*100) / 100
+
+		// Determine who the payer is
+		payerID := userID
+		if req.PaidBy > 0 {
+			payerID = req.PaidBy
+		}
+
 		for _, member := range members {
-			splits = append(splits, models.ExpenseSplitInput{UserID: member.ID, Amount: splitAmount})
+			amt := perPerson
+			if member.ID == payerID {
+				amt = math.Round((perPerson+remainder)*100) / 100
+			}
+			splits = append(splits, models.ExpenseSplitInput{UserID: member.ID, Amount: amt})
 		}
 
 	case "exact":
@@ -90,7 +106,25 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 			return
 		}
 		for _, s := range req.SplitWith {
-			splits = append(splits, models.ExpenseSplitInput{UserID: s.UserID, Amount: req.Amount * s.Amount / 100})
+			amt := math.Round(req.Amount*s.Amount/100*100) / 100
+			splits = append(splits, models.ExpenseSplitInput{UserID: s.UserID, Amount: amt})
+		}
+		// Fix rounding: adjust payer's share so total matches exactly
+		var splitTotal float64
+		for _, s := range splits {
+			splitTotal += s.Amount
+		}
+		if diff := math.Round((req.Amount-splitTotal)*100) / 100; diff != 0 {
+			payerID := userID
+			if req.PaidBy > 0 {
+				payerID = req.PaidBy
+			}
+			for i, s := range splits {
+				if s.UserID == payerID {
+					splits[i].Amount = math.Round((s.Amount+diff)*100) / 100
+					break
+				}
+			}
 		}
 
 	default:
