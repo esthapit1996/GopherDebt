@@ -172,6 +172,7 @@ func main() {
 		// Suggestion routes
 		api.GET("/suggestions", suggestionHandler.GetSuggestions)
 		api.POST("/suggestions", suggestionHandler.CreateSuggestion)
+		api.PUT("/suggestions/:id", suggestionHandler.EditSuggestion)
 		api.DELETE("/suggestions/:id", suggestionHandler.DeleteSuggestion)
 		api.POST("/suggestions/:id/vote", suggestionHandler.VoteSuggestion)
 		api.DELETE("/suggestions/:id/vote", suggestionHandler.RemoveVote)
@@ -179,6 +180,7 @@ func main() {
 		api.PUT("/suggestions/:id/status", suggestionHandler.UpdateSuggestionStatus)
 		api.GET("/suggestions/:id/comments", suggestionHandler.GetComments)
 		api.POST("/suggestions/:id/comments", suggestionHandler.CreateComment)
+		api.PUT("/suggestions/:id/comments/:commentId", suggestionHandler.EditComment)
 		api.DELETE("/suggestions/:id/comments/:commentId", suggestionHandler.DeleteComment)
 
 		// Currency routes

@@ -246,6 +246,24 @@ func DeleteComment(db *sql.DB, commentID int) error {
 	return err
 }
 
+// UpdateSuggestion updates the content and/or type of a suggestion
+func UpdateSuggestion(db *sql.DB, suggestionID int, content, suggestionType string) error {
+	if len(content) > MaxSuggestionLength {
+		content = content[:MaxSuggestionLength]
+	}
+	_, err := db.Exec("UPDATE suggestions SET content = $1, type = $2 WHERE id = $3", content, suggestionType, suggestionID)
+	return err
+}
+
+// UpdateComment updates the content of a comment
+func UpdateComment(db *sql.DB, commentID int, content string) error {
+	if len(content) > MaxCommentLength {
+		content = content[:MaxCommentLength]
+	}
+	_, err := db.Exec("UPDATE suggestion_comments SET content = $1 WHERE id = $2", content, commentID)
+	return err
+}
+
 // GetCommentByID returns a comment by ID
 func GetCommentByID(db *sql.DB, commentID int) (*Comment, error) {
 	var c Comment

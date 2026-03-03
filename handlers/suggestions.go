@@ -121,6 +121,44 @@ func (h *SuggestionHandler) DeleteSuggestion(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: "Suggestion deleted"})
 }
 
+// EditSuggestion updates a suggestion's content and type (only author can edit)
+func (h *SuggestionHandler) EditSuggestion(c *gin.Context) {
+	userID := c.GetInt("userID")
+	suggestionID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid suggestion ID"})
+		return
+	}
+
+	suggestion, err := db.GetSuggestionByID(h.DB, suggestionID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Suggestion not found"})
+		return
+	}
+
+	if suggestion.UserID != userID {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the suggestion author can edit this"})
+		return
+	}
+
+	var req CreateSuggestionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Content is required and must be max 420 characters"})
+		return
+	}
+
+	if req.Type == "" {
+		req.Type = "other"
+	}
+
+	if err := db.UpdateSuggestion(h.DB, suggestionID, req.Content, req.Type); err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to update suggestion"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: "Suggestion updated"})
+}
+
 // VoteSuggestion adds or updates a vote on a suggestion
 func (h *SuggestionHandler) VoteSuggestion(c *gin.Context) {
 	userID := c.GetInt("userID")
@@ -354,4 +392,38 @@ func (h *SuggestionHandler) DeleteComment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: "Comment deleted"})
+}
+
+// EditComment updates a comment's content (only comment author can edit)
+func (h *SuggestionHandler) EditComment(c *gin.Context) {
+	userID := c.GetInt("userID")
+	commentID, err := strconv.Atoi(c.Param("commentId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid comment ID"})
+		return
+	}
+
+	comment, err := db.GetCommentByID(h.DB, commentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Comment not found"})
+		return
+	}
+
+	if comment.UserID != userID {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the comment author can edit this"})
+		return
+	}
+
+	var req CreateCommentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Content is required and must be max 420 characters"})
+		return
+	}
+
+	if err := db.UpdateComment(h.DB, commentID, req.Content); err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to update comment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: "Comment updated"})
 }
