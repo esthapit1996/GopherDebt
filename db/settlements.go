@@ -228,110 +228,130 @@ type DebtOverviewItem struct {
 	Amount float64      `json:"amount"` // Positive = they owe you, Negative = you owe them
 }
 
-// GetDebtOverview calculates how much each user owes/is owed by the current user across all groups
+// GetDebtOverview calculates how much each user owes/is owed by the current user across all groups.
+// Uses 4 batch queries regardless of group count (was 4N+1 with per-group loops).
 func GetDebtOverview(d *sql.DB, userID int) ([]DebtOverviewItem, error) {
 	return retry("GetDebtOverview", func() ([]DebtOverviewItem, error) {
-		// Get all groups the user is a member of
-		groups, err := GetUserGroups(d, userID)
+		// Subquery reused in all 4 queries below
+		groupSub := `SELECT group_id FROM group_members WHERE user_id = $1`
+
+		// 1. Batch-fetch all distinct users across user's groups
+		userMap := make(map[int]*models.User)
+		userRows, err := d.Query(
+			`SELECT DISTINCT u.id, u.email, u.name, COALESCE(u.avatar, ''),
+			        COALESCE(u.theme_preference, 'darkknight'), COALESCE(u.language, 'en'),
+			        u.created_at, u.updated_at
+			 FROM users u
+			 INNER JOIN group_members gm ON u.id = gm.user_id
+			 WHERE gm.group_id IN (`+groupSub+`) AND u.id != $1`,
+			userID,
+		)
 		if err != nil {
 			return nil, err
 		}
+		func() {
+			defer userRows.Close()
+			for userRows.Next() {
+				var u models.User
+				if err := userRows.Scan(&u.ID, &u.Email, &u.Name, &u.Avatar,
+					&u.ThemePreference, &u.Language, &u.CreatedAt, &u.UpdatedAt); err != nil {
+					continue
+				}
+				user := u
+				userMap[user.ID] = &user
+			}
+		}()
 
-		// Map to accumulate net balances with each user
-		// Positive = they owe us, Negative = we owe them
+		// 2. Batch expense splits across all groups
 		userBalances := make(map[int]float64)
-		userMap := make(map[int]*models.User)
-
-		for _, group := range groups {
-			// Get all members of this group for userMap
-			members, err := GetGroupMembers(d, group.ID)
-			if err != nil {
-				return nil, err
-			}
-			for i := range members {
-				if members[i].ID != userID {
-					userMap[members[i].ID] = &members[i]
-				}
-			}
-
-			// Calculate pairwise balances from expense splits
-			rows, err := d.Query(
-				`SELECT e.paid_by, es.user_id, es.amount 
-				FROM expenses e 
-				INNER JOIN expense_splits es ON e.id = es.expense_id 
-				WHERE e.group_id = $1`,
-				group.ID,
-			)
-			if err != nil {
-				return nil, err
-			}
-
-			func() {
-				defer rows.Close()
-				for rows.Next() {
-					var paidBy, splitUser int
-					var amount float64
-					if err := rows.Scan(&paidBy, &splitUser, &amount); err != nil {
-						continue
-					}
-					if paidBy == userID && splitUser != userID {
-						userBalances[splitUser] += amount
-					}
-					if paidBy != userID && splitUser == userID {
-						userBalances[paidBy] -= amount
-					}
-				}
-			}()
-
-			// Factor in settlements
-			settlements, err := GetGroupSettlements(d, group.ID)
-			if err != nil {
-				return nil, err
-			}
-			for _, s := range settlements {
-				if s.PaidBy == userID && s.PaidTo != userID {
-					userBalances[s.PaidTo] += s.Amount
-				}
-				if s.PaidBy != userID && s.PaidTo == userID {
-					userBalances[s.PaidBy] -= s.Amount
-				}
-			}
-
-			// Factor in expense payments (partial repayments)
-			paymentRows, err := d.Query(
-				`SELECT ep.paid_by, e.paid_by as expense_payer, ep.amount 
-				FROM expense_payments ep 
-				INNER JOIN expenses e ON ep.expense_id = e.id 
-				WHERE e.group_id = $1`,
-				group.ID,
-			)
-			if err != nil {
-				return nil, err
-			}
-
-			func() {
-				defer paymentRows.Close()
-				for paymentRows.Next() {
-					var paidBy, expensePayer int
-					var amount float64
-					if err := paymentRows.Scan(&paidBy, &expensePayer, &amount); err != nil {
-						continue
-					}
-					if paidBy == userID && expensePayer != userID {
-						userBalances[expensePayer] += amount
-					}
-					if paidBy != userID && expensePayer == userID {
-						userBalances[paidBy] -= amount
-					}
-				}
-			}()
+		splitRows, err := d.Query(
+			`SELECT e.paid_by, es.user_id, es.amount
+			 FROM expenses e
+			 INNER JOIN expense_splits es ON e.id = es.expense_id
+			 WHERE e.group_id IN (`+groupSub+`)`,
+			userID,
+		)
+		if err != nil {
+			return nil, err
 		}
+		func() {
+			defer splitRows.Close()
+			for splitRows.Next() {
+				var paidBy, splitUser int
+				var amount float64
+				if err := splitRows.Scan(&paidBy, &splitUser, &amount); err != nil {
+					continue
+				}
+				if paidBy == userID && splitUser != userID {
+					userBalances[splitUser] += amount
+				}
+				if paidBy != userID && splitUser == userID {
+					userBalances[paidBy] -= amount
+				}
+			}
+		}()
+
+		// 3. Batch settlements across all groups
+		settleRows, err := d.Query(
+			`SELECT paid_by, paid_to, amount
+			 FROM settlements
+			 WHERE group_id IN (`+groupSub+`)`,
+			userID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		func() {
+			defer settleRows.Close()
+			for settleRows.Next() {
+				var paidBy, paidTo int
+				var amount float64
+				if err := settleRows.Scan(&paidBy, &paidTo, &amount); err != nil {
+					continue
+				}
+				if paidBy == userID && paidTo != userID {
+					userBalances[paidTo] += amount
+				}
+				if paidBy != userID && paidTo == userID {
+					userBalances[paidBy] -= amount
+				}
+			}
+		}()
+
+		// 4. Batch expense payments across all groups
+		paymentRows, err := d.Query(
+			`SELECT ep.paid_by, e.paid_by AS expense_payer, ep.amount
+			 FROM expense_payments ep
+			 INNER JOIN expenses e ON ep.expense_id = e.id
+			 WHERE e.group_id IN (`+groupSub+`)`,
+			userID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		func() {
+			defer paymentRows.Close()
+			for paymentRows.Next() {
+				var paidBy, expensePayer int
+				var amount float64
+				if err := paymentRows.Scan(&paidBy, &expensePayer, &amount); err != nil {
+					continue
+				}
+				if paidBy == userID && expensePayer != userID {
+					userBalances[expensePayer] += amount
+				}
+				if paidBy != userID && expensePayer == userID {
+					userBalances[paidBy] -= amount
+				}
+			}
+		}()
 
 		// Convert to DebtOverviewItem slice, only include non-zero balances
 		var result []DebtOverviewItem
 		for uid, balance := range userBalances {
 			if balance > 0.01 || balance < -0.01 {
 				if userMap[uid] == nil {
+					// Fallback for users who left groups but have financial history
 					user, err := GetUserByID(d, uid)
 					if err == nil && user != nil {
 						userMap[uid] = user

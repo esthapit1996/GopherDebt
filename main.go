@@ -85,6 +85,10 @@ func main() {
 		c.Next()
 	})
 
+	// Rate limiters: strict for auth, normal for protected endpoints
+	authLimiter := middleware.NewRateLimiter(10, time.Minute) // 10 req/min for login/register
+	apiLimiter := middleware.NewRateLimiter(100, time.Minute) // 100 req/min for API routes
+
 	// Root endpoint
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -115,13 +119,14 @@ func main() {
 		c.JSON(200, gin.H{"status": "healthy"})
 	})
 
-	// Public routes
-	r.POST("/api/register", userHandler.Register)
-	r.POST("/api/login", userHandler.Login)
+	// Public routes (strict rate limit to prevent brute force)
+	r.POST("/api/register", authLimiter.Middleware(), userHandler.Register)
+	r.POST("/api/login", authLimiter.Middleware(), userHandler.Login)
 
 	// Protected routes
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
+	api.Use(apiLimiter.Middleware())
 	{
 		// User routes
 		api.GET("/profile", userHandler.GetProfile)
