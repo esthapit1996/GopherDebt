@@ -237,7 +237,7 @@ func (h *SuggestionHandler) GetVoters(c *gin.Context) {
 }
 
 type UpdateStatusRequest struct {
-	Status string `json:"status" binding:"required,oneof=open wip done"`
+	Status string `json:"status" binding:"required,oneof=open wip done denied"`
 }
 
 // UpdateSuggestionStatus updates the status of a suggestion (only for app founder)
@@ -263,7 +263,7 @@ func (h *SuggestionHandler) UpdateSuggestionStatus(c *gin.Context) {
 
 	var req UpdateStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Status must be 'open', 'wip', or 'done'"})
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Status must be 'open', 'wip', 'done', or 'denied'"})
 		return
 	}
 
