@@ -66,6 +66,7 @@ func main() {
 	currencyHandler := handlers.NewCurrencyHandler()
 	accessControlHandler := handlers.NewAccessControlHandler(database)
 	receiptHandler := handlers.NewReceiptHandler()
+	stashHandler := handlers.NewStashHandler(database)
 
 	// Setup router
 	r := gin.Default()
@@ -197,6 +198,13 @@ func main() {
 
 		// Receipt scanning (Gemini proxy)
 		api.POST("/receipt/scan", receiptHandler.ScanReceipt)
+
+		// GopherStash routes (personal expense tracker)
+		api.GET("/stash", stashHandler.GetStashExpenses)
+		api.POST("/stash", stashHandler.CreateStashExpense)
+		api.DELETE("/stash/:id", stashHandler.DeleteStashExpense)
+		api.GET("/stash/summary", stashHandler.GetStashSummary)
+		api.DELETE("/stash", stashHandler.ClearStashExpenses)
 
 		// Access control routes (whitelist/blacklist)
 		api.GET("/whitelist", accessControlHandler.GetWhitelist)

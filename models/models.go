@@ -187,6 +187,30 @@ type ExpensePaymentStatus struct {
 	TotalPaid float64 `json:"total_paid"`
 }
 
+// StashExpense represents a personal expense tracked in GopherStash
+type StashExpense struct {
+	ID          int       `json:"id"`
+	UserID      int       `json:"user_id"`
+	Amount      float64   `json:"amount"`
+	Description string    `json:"description"`
+	Category    string    `json:"category"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// CreateStashExpenseRequest is the payload for adding a personal expense
+type CreateStashExpenseRequest struct {
+	Amount      float64 `json:"amount" binding:"required,gt=0"`
+	Description string  `json:"description" binding:"required,max=255"`
+	Category    string  `json:"category" binding:"max=50"`
+}
+
+// StashSummary is the total spent summary for GopherStash
+type StashSummary struct {
+	TotalSpent   float64            `json:"total_spent"`
+	ExpenseCount int                `json:"expense_count"`
+	ByCategory   map[string]float64 `json:"by_category"`
+}
+
 // APIResponse is a standard API response wrapper
 type APIResponse struct {
 	Success bool        `json:"success"`

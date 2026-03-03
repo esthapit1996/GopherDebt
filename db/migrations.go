@@ -163,6 +163,16 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_settlements_paid_by ON settlements(paid_by)`,
 		`CREATE INDEX IF NOT EXISTS idx_settlements_paid_to ON settlements(paid_to)`,
 		`CREATE INDEX IF NOT EXISTS idx_expense_payments_paid_by ON expense_payments(paid_by)`,
+		// GopherStash: personal expense tracker
+		`CREATE TABLE IF NOT EXISTS stash_expenses (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+			amount DECIMAL(10, 2) NOT NULL,
+			description VARCHAR(255) NOT NULL,
+			category VARCHAR(50) DEFAULT '',
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_stash_expenses_user_id ON stash_expenses(user_id)`,
 	}
 
 	for i, migration := range migrations {
