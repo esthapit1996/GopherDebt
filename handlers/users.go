@@ -246,6 +246,36 @@ func (h *UserHandler) UpdateAvatar(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Avatar updated"})
 }
 
+func (h *UserHandler) UpdateLanguage(c *gin.Context) {
+	userID := c.GetInt("userID")
+
+	var req struct {
+		Language string `json:"language" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
+		return
+	}
+
+	// Validate language
+	validLanguages := map[string]bool{
+		"en": true, "it": true,
+	}
+	if !validLanguages[req.Language] {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid language"})
+		return
+	}
+
+	err := db.UpdateUserLanguage(h.DB, userID, req.Language)
+	if err != nil {
+		log.Printf("ERROR UpdateLanguage: user %d, language %s: %v", userID, req.Language, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to update language"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Language updated"})
+}
+
 func (h *UserHandler) ChangePassword(c *gin.Context) {
 	userID := c.GetInt("userID")
 

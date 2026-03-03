@@ -155,6 +155,8 @@ func RunMigrations(db *sql.DB) error {
 		`UPDATE users SET theme_preference = 'darkknight' WHERE theme_preference = 'dark'`,
 		// Rename 'light' theme to 'flashbang'
 		`UPDATE users SET theme_preference = 'flashbang' WHERE theme_preference = 'light'`,
+		// Add language column to users table
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'en'`,
 	}
 
 	for i, migration := range migrations {

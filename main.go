@@ -133,6 +133,7 @@ func main() {
 		api.DELETE("/payment-history", userHandler.ClearPaymentHistory)
 		api.PUT("/profile/theme", userHandler.UpdateTheme)
 		api.PUT("/profile/avatar", userHandler.UpdateAvatar)
+		api.PUT("/profile/language", userHandler.UpdateLanguage)
 		api.PUT("/profile/password", userHandler.ChangePassword)
 
 		// Group routes
