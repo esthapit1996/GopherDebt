@@ -630,3 +630,247 @@ func TestJWT_ExpiresAt7Days(t *testing.T) {
 		t.Errorf("7-day token should be valid, got %d", w.Code)
 	}
 }
+
+// --- GopherStash validation tests ---
+
+func TestCreateStashExpense_EmptyBody(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
+	r := gin.New()
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware())
+	api.POST("/stash/expenses", func(c *gin.Context) {
+		var req models.CreateStashExpenseRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid request: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
+	})
+	token := generateTestToken(1)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/stash/expenses", bytes.NewBuffer([]byte("{}")))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty stash expense body, got %d", w.Code)
+	}
+}
+
+func TestCreateStashExpense_ZeroAmount(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
+	r := gin.New()
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware())
+	api.POST("/stash/expenses", func(c *gin.Context) {
+		var req models.CreateStashExpenseRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid request: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
+	})
+	token := generateTestToken(1)
+	body, _ := json.Marshal(map[string]interface{}{"amount": 0, "description": "test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/stash/expenses", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for zero amount stash expense, got %d", w.Code)
+	}
+}
+
+func TestCreateStashExpense_NegativeAmount(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
+	r := gin.New()
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware())
+	api.POST("/stash/expenses", func(c *gin.Context) {
+		var req models.CreateStashExpenseRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid request: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
+	})
+	token := generateTestToken(1)
+	body, _ := json.Marshal(map[string]interface{}{"amount": -10.5, "description": "test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/stash/expenses", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for negative amount stash expense, got %d", w.Code)
+	}
+}
+
+func TestCreateStashExpense_DescriptionOptional(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
+	r := gin.New()
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware())
+	api.POST("/stash/expenses", func(c *gin.Context) {
+		var req models.CreateStashExpenseRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid request: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true, Data: req})
+	})
+	token := generateTestToken(1)
+	// Send without description — should pass validation since description is optional
+	body, _ := json.Marshal(map[string]interface{}{"amount": 25.50, "category": "food"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/stash/expenses", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201 for stash expense without description, got %d", w.Code)
+	}
+}
+
+func TestCreateStashExpense_ValidWithAllFields(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
+	r := gin.New()
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware())
+	api.POST("/stash/expenses", func(c *gin.Context) {
+		var req models.CreateStashExpenseRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid request: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
+	})
+	token := generateTestToken(1)
+	body, _ := json.Marshal(map[string]interface{}{
+		"amount":      42.50,
+		"description": "Lunch at office",
+		"category":    "food",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/stash/expenses", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201 for valid stash expense, got %d", w.Code)
+	}
+}
+
+func TestCreateStashExpense_DescriptionTooLong(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
+	r := gin.New()
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware())
+	api.POST("/stash/expenses", func(c *gin.Context) {
+		var req models.CreateStashExpenseRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid request: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
+	})
+	token := generateTestToken(1)
+	longDesc := ""
+	for i := 0; i < 256; i++ {
+		longDesc += "x"
+	}
+	body, _ := json.Marshal(map[string]interface{}{
+		"amount":      10.0,
+		"description": longDesc,
+		"category":    "food",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/stash/expenses", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for description >255 chars, got %d", w.Code)
+	}
+}
+
+func TestDeleteStashExpense_InvalidID(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
+	r := gin.New()
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware())
+	api.DELETE("/stash/expenses/:id", func(c *gin.Context) {
+		_, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid expense ID"})
+			return
+		}
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
+	})
+	token := generateTestToken(1)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("DELETE", "/api/stash/expenses/abc", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for non-numeric stash expense ID, got %d", w.Code)
+	}
+}
+
+func TestStashExpense_RequiresAuth(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
+	r := gin.New()
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware())
+	api.GET("/stash/expenses", func(c *gin.Context) {
+		c.JSON(http.StatusOK, models.APIResponse{Success: true})
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/stash/expenses", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauthenticated stash access, got %d", w.Code)
+	}
+}
+
+func TestCreateStashExpense_CategoryTooLong(t *testing.T) {
+	os.Setenv("JWT_SECRET", testJWTSecret)
+	defer os.Unsetenv("JWT_SECRET")
+	r := gin.New()
+	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware())
+	api.POST("/stash/expenses", func(c *gin.Context) {
+		var req models.CreateStashExpenseRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid request: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, models.APIResponse{Success: true})
+	})
+	token := generateTestToken(1)
+	longCat := ""
+	for i := 0; i < 51; i++ {
+		longCat += "x"
+	}
+	body, _ := json.Marshal(map[string]interface{}{
+		"amount":   10.0,
+		"category": longCat,
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/stash/expenses", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for category >50 chars, got %d", w.Code)
+	}
+}
