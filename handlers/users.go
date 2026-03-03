@@ -196,7 +196,7 @@ func (h *UserHandler) UpdateTheme(c *gin.Context) {
 	validThemes := map[string]bool{
 		"espresso": true, "darkknight": true, "dracula": true, "monokai": true,
 		"cyberpunk": true, "ocean": true, "matcha": true, "rosegold": true, "purplehaze": true,
-		"lavender": true, "sakura": true, "cottoncandy": true, "solarized": true, "light": true,
+		"lavender": true, "sakura": true, "cottoncandy": true, "solarized": true, "flashbang": true,
 	}
 	if !validThemes[req.Theme] {
 		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid theme"})

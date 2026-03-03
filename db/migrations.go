@@ -153,6 +153,8 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS type VARCHAR(30) DEFAULT 'other'`,
 		// Rename 'dark' theme to 'darkknight'
 		`UPDATE users SET theme_preference = 'darkknight' WHERE theme_preference = 'dark'`,
+		// Rename 'light' theme to 'flashbang'
+		`UPDATE users SET theme_preference = 'flashbang' WHERE theme_preference = 'light'`,
 	}
 
 	for i, migration := range migrations {
