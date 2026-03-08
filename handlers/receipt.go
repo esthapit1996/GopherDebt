@@ -21,6 +21,13 @@ func NewReceiptHandler() *ReceiptHandler {
 	return &ReceiptHandler{}
 }
 
+// ReceiptConfig returns whether server-side Gemini key is configured
+func (h *ReceiptHandler) ReceiptConfig(c *gin.Context) {
+	apiKey := os.Getenv("GEMINI_API_KEY")
+	enabled := apiKey != ""
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: map[string]bool{"enabled": enabled}})
+}
+
 // ScanReceipt proxies a receipt image to Gemini API so the API key stays server-side
 func (h *ReceiptHandler) ScanReceipt(c *gin.Context) {
 	apiKey := os.Getenv("GEMINI_API_KEY")

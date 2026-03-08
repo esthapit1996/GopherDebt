@@ -199,6 +199,8 @@ func main() {
 
 		// Receipt scanning (Gemini proxy)
 		api.POST("/receipt/scan", receiptHandler.ScanReceipt)
+		// Config for receipt scanning (frontend can check if AI scanning is available)
+		api.GET("/receipt/config", receiptHandler.ReceiptConfig)
 
 		// GopherStash routes (personal expense tracker)
 		api.GET("/stash", stashHandler.GetStashExpenses)
