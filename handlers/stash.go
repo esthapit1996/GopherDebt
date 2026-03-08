@@ -156,3 +156,57 @@ func (h *StashHandler) ClearStashExpenses(c *gin.Context) {
 		Message: "All stash expenses cleared",
 	})
 }
+
+// UpdateStashExpense allows the authenticated user to edit their personal expense
+func (h *StashHandler) UpdateStashExpense(c *gin.Context) {
+	userID := c.GetInt("userID")
+	expenseID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{
+			Success: false,
+			Error:   "Invalid expense ID",
+		})
+		return
+	}
+
+	var req models.CreateStashExpenseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{
+			Success: false,
+			Error:   "Invalid request: " + err.Error(),
+		})
+		return
+	}
+
+	// Default description if empty
+	description := req.Description
+	if description == "" {
+		if req.Category != "" {
+			description = strings.ToUpper(req.Category[:1]) + req.Category[1:]
+		} else {
+			description = "Expense"
+		}
+	}
+
+	updated, err := db.UpdateStashExpense(h.DB, expenseID, userID, req.Amount, description, req.Category)
+	if err != nil {
+		if err == db.ErrNotFound {
+			c.JSON(http.StatusNotFound, models.APIResponse{
+				Success: false,
+				Error:   "Expense not found",
+			})
+			return
+		}
+		log.Printf("ERROR UpdateStashExpense: user %d, expense %d: %v", userID, expenseID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{
+			Success: false,
+			Error:   "Failed to update expense",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{
+		Success: true,
+		Data:    updated,
+	})
+}

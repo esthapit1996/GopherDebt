@@ -67,6 +67,36 @@ func DeleteStashExpense(db *sql.DB, expenseID, userID int) error {
 	return nil
 }
 
+// UpdateStashExpense updates an existing personal expense if it belongs to the user
+func UpdateStashExpense(db *sql.DB, expenseID, userID int, amount float64, description, category string) (*models.StashExpense, error) {
+	var expense models.StashExpense
+	result, err := db.Exec(
+		`UPDATE stash_expenses SET amount = $1, description = $2, category = $3 WHERE id = $4 AND user_id = $5`,
+		amount, description, category, expenseID, userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if rows == 0 {
+		return nil, ErrNotFound
+	}
+
+	err = db.QueryRow(
+		`SELECT id, user_id, amount, description, COALESCE(category, ''), created_at
+		 FROM stash_expenses
+		 WHERE id = $1`,
+		expenseID,
+	).Scan(&expense.ID, &expense.UserID, &expense.Amount, &expense.Description, &expense.Category, &expense.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &expense, nil
+}
+
 // GetStashSummary returns the total spent and breakdown by category
 func GetStashSummary(d *sql.DB, userID int) (*models.StashSummary, error) {
 	return retry("GetStashSummary", func() (*models.StashSummary, error) {

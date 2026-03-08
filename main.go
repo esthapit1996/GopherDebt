@@ -205,6 +205,7 @@ func main() {
 		// GopherStash routes (personal expense tracker)
 		api.GET("/stash", stashHandler.GetStashExpenses)
 		api.POST("/stash", stashHandler.CreateStashExpense)
+		api.PUT("/stash/:id", stashHandler.UpdateStashExpense)
 		api.DELETE("/stash/:id", stashHandler.DeleteStashExpense)
 		api.GET("/stash/summary", stashHandler.GetStashSummary)
 		api.DELETE("/stash", stashHandler.ClearStashExpenses)
