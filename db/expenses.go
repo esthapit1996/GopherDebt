@@ -236,3 +236,36 @@ func DeleteAllGroupExpenses(db *sql.DB, groupID int) (int64, error) {
 	}
 	return result.RowsAffected()
 }
+
+// UpdateExpense updates an existing expense and replaces its splits.
+func UpdateExpense(db *sql.DB, expenseID, paidBy int, amount float64, description, splitType string, splits []models.ExpenseSplitInput) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`UPDATE expenses SET paid_by = $1, amount = $2, description = $3, split_type = $4, updated_at = NOW() WHERE id = $5`, paidBy, amount, description, splitType, expenseID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+
+	// Replace splits
+	if _, err := tx.Exec(`DELETE FROM expense_splits WHERE expense_id = $1`, expenseID); err != nil {
+		return err
+	}
+	for _, s := range splits {
+		if _, err := tx.Exec(`INSERT INTO expense_splits (expense_id, user_id, amount) VALUES ($1, $2, $3)`, expenseID, s.UserID, s.Amount); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}

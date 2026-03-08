@@ -10,6 +10,7 @@ import (
 const (
 	ActivityExpenseCreated = "expense_created"
 	ActivityExpenseDeleted = "expense_deleted"
+	ActivityExpenseUpdated = "expense_updated"
 	ActivitySettlement     = "settlement"
 	ActivityPayment        = "payment"
 	ActivityMemberAdded    = "member_added"

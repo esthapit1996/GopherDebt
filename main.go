@@ -153,6 +153,7 @@ func main() {
 
 		// Expense routes
 		api.POST("/groups/:id/expenses", expenseHandler.CreateExpense)
+		api.PUT("/groups/:id/expenses/:expenseID", expenseHandler.UpdateExpense)
 		api.GET("/groups/:id/expenses", expenseHandler.GetGroupExpenses)
 		api.GET("/groups/:id/expenses/unpaid", expenseHandler.GetUnpaidExpenses)
 		api.GET("/groups/:id/expenses/:expenseID", expenseHandler.GetExpense)

@@ -279,6 +279,175 @@ func (h *ExpenseHandler) GetExpense(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: expense})
 }
 
+func (h *ExpenseHandler) UpdateExpense(c *gin.Context) {
+	userID := c.GetInt("userID")
+	groupID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid group ID"})
+		return
+	}
+
+	expenseID, err := strconv.Atoi(c.Param("expenseID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid expense ID"})
+		return
+	}
+
+	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
+	if err != nil {
+		log.Printf("ERROR UpdateExpense: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
+		return
+	}
+
+	expense, err := db.GetExpenseByID(h.DB, expenseID)
+	if err == db.ErrNotFound {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Expense not found"})
+		return
+	}
+	if err != nil {
+		log.Printf("ERROR UpdateExpense: GetExpenseByID %d: %v", expenseID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch expense"})
+		return
+	}
+
+	if expense.GroupID != groupID {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Expense not found in this group"})
+		return
+	}
+
+	var req models.CreateExpenseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
+		return
+	}
+
+	// Fetch group members for validation
+	groupMembers, err := db.GetGroupMembers(h.DB, groupID)
+	if err != nil {
+		log.Printf("ERROR UpdateExpense: GetGroupMembers for group %d: %v", groupID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to get group members"})
+		return
+	}
+	memberSet := make(map[int]bool, len(groupMembers))
+	for _, m := range groupMembers {
+		memberSet[m.ID] = true
+	}
+
+	var splits []models.ExpenseSplitInput
+	switch req.SplitType {
+	case "equal":
+		n := len(groupMembers)
+		perPerson := math.Floor(req.Amount/float64(n)*100) / 100
+		assigned := perPerson * float64(n)
+		remainder := math.Round((req.Amount-assigned)*100) / 100
+
+		payerID := userID
+		if req.PaidBy > 0 {
+			payerID = req.PaidBy
+		}
+
+		for _, member := range groupMembers {
+			amt := perPerson
+			if member.ID == payerID {
+				amt = math.Round((perPerson+remainder)*100) / 100
+			}
+			splits = append(splits, models.ExpenseSplitInput{UserID: member.ID, Amount: amt})
+		}
+
+	case "exact":
+		if len(req.SplitWith) == 0 {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "split_with is required for exact split type"})
+			return
+		}
+		var total float64
+		for _, s := range req.SplitWith {
+			total += s.Amount
+		}
+		if total < req.Amount-0.01 || total > req.Amount+0.01 {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Split amounts must equal the expense amount"})
+			return
+		}
+		splits = req.SplitWith
+
+	case "percentage":
+		if len(req.SplitWith) == 0 {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "split_with is required for percentage split type"})
+			return
+		}
+		var totalPercent float64
+		for _, s := range req.SplitWith {
+			totalPercent += s.Amount
+		}
+		if totalPercent < 99.99 || totalPercent > 100.01 {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Percentages must total 100"})
+			return
+		}
+		for _, s := range req.SplitWith {
+			amt := math.Round(req.Amount*s.Amount/100*100) / 100
+			splits = append(splits, models.ExpenseSplitInput{UserID: s.UserID, Amount: amt})
+		}
+		var splitTotal float64
+		for _, s := range splits {
+			splitTotal += s.Amount
+		}
+		if diff := math.Round((req.Amount-splitTotal)*100) / 100; diff != 0 {
+			payerID := userID
+			if req.PaidBy > 0 {
+				payerID = req.PaidBy
+			}
+			for i, s := range splits {
+				if s.UserID == payerID {
+					splits[i].Amount = math.Round((s.Amount+diff)*100) / 100
+					break
+				}
+			}
+		}
+
+	default:
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid split type"})
+		return
+	}
+
+	// Validate split users
+	for _, split := range splits {
+		if !memberSet[split.UserID] {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "All users in split must be group members"})
+			return
+		}
+	}
+
+	payer := userID
+	if req.PaidBy > 0 {
+		if !memberSet[req.PaidBy] {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Payer must be a group member"})
+			return
+		}
+		payer = req.PaidBy
+	}
+
+	if err := db.UpdateExpense(h.DB, expenseID, payer, req.Amount, req.Description, req.SplitType, splits); err != nil {
+		if err == db.ErrNotFound {
+			c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Expense not found"})
+			return
+		}
+		log.Printf("ERROR UpdateExpense: UpdateExpense %d: %v", expenseID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to update expense"})
+		return
+	}
+
+	// Log activity
+	amount := req.Amount
+	db.LogActivity(h.DB, groupID, userID, db.ActivityExpenseUpdated, req.Description, &amount, nil)
+
+	updated, _ := db.GetExpenseByID(h.DB, expenseID)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Expense updated successfully", Data: updated})
+}
+
 func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
 	userID := c.GetInt("userID")
 	groupID, err := strconv.Atoi(c.Param("id"))
