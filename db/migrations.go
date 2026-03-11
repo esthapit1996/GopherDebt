@@ -173,13 +173,37 @@ func RunMigrations(db *sql.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_stash_expenses_user_id ON stash_expenses(user_id)`,
-		// Enable RLS on stash_expenses so the table is not publicly accessible via PostgREST
+		// Enable RLS on all public tables so they are not exposed via PostgREST without a policy.
+		// The app connects as a single role and enforces access control at the query level,
+		// so policies use USING (true) to allow the app role through unconditionally.
+		`ALTER TABLE users ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY users_app_access ON users USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE groups ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY groups_app_access ON groups USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE group_members ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY group_members_app_access ON group_members USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE expenses ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY expenses_app_access ON expenses USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE expense_splits ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY expense_splits_app_access ON expense_splits USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE settlements ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY settlements_app_access ON settlements USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE expense_payments ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY expense_payments_app_access ON expense_payments USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY activity_log_app_access ON activity_log USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE suggestions ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY suggestions_app_access ON suggestions USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE suggestion_votes ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY suggestion_votes_app_access ON suggestion_votes USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE suggestion_comments ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY suggestion_comments_app_access ON suggestion_comments USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE email_whitelist ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY email_whitelist_app_access ON email_whitelist USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE email_blacklist ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY email_blacklist_app_access ON email_blacklist USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE stash_expenses ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN
-			CREATE POLICY stash_expenses_self_access ON stash_expenses
-				USING (true) WITH CHECK (true);
-		EXCEPTION WHEN duplicate_object THEN NULL;
-		END $$`,
+		`DO $$ BEGIN CREATE POLICY stash_expenses_app_access ON stash_expenses USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 	}
 
 	for i, migration := range migrations {
