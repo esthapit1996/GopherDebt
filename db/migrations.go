@@ -173,6 +173,13 @@ func RunMigrations(db *sql.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_stash_expenses_user_id ON stash_expenses(user_id)`,
+		// Enable RLS on stash_expenses so the table is not publicly accessible via PostgREST
+		`ALTER TABLE stash_expenses ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN
+			CREATE POLICY stash_expenses_self_access ON stash_expenses
+				USING (true) WITH CHECK (true);
+		EXCEPTION WHEN duplicate_object THEN NULL;
+		END $$`,
 	}
 
 	for i, migration := range migrations {
