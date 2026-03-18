@@ -374,6 +374,7 @@ type DebtDetailItem struct {
 	Type        string    `json:"type"` // "expense", "settlement", "settled"
 	GroupID     int       `json:"group_id"`
 	GroupName   string    `json:"group_name"`
+	ExpenseID   int       `json:"expense_id,omitempty"`
 	Description string    `json:"description"`
 	Amount      float64   `json:"amount"` // Positive = they owe you, Negative = you owe them
 	CreatedAt   time.Time `json:"created_at"`
@@ -393,7 +394,7 @@ func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error
 		for _, group := range groups {
 			// Expenses with payment totals: show net amount or "Settled"
 			rows, err := d.Query(
-				`SELECT e.description, es.amount, e.created_at, e.paid_by,
+				`SELECT e.id, e.description, es.amount, e.created_at, e.paid_by,
 					COALESCE((SELECT SUM(ep.amount) FROM expense_payments ep WHERE ep.expense_id = e.id
 						AND ((ep.paid_by = $3 AND e.paid_by = $2) OR (ep.paid_by = $2 AND e.paid_by = $3))), 0) as total_paid
 				FROM expenses e
@@ -413,10 +414,11 @@ func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error
 				defer rows.Close()
 				for rows.Next() {
 					var desc string
+					var expenseID int
 					var splitAmount, totalPaid float64
 					var createdAt time.Time
 					var paidBy int
-					if err := rows.Scan(&desc, &splitAmount, &createdAt, &paidBy, &totalPaid); err != nil {
+					if err := rows.Scan(&expenseID, &desc, &splitAmount, &createdAt, &paidBy, &totalPaid); err != nil {
 						continue
 					}
 
@@ -426,6 +428,7 @@ func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error
 							Type:        "settled",
 							GroupID:     group.ID,
 							GroupName:   group.Name,
+							ExpenseID:   expenseID,
 							Description: desc,
 							Amount:      0,
 							CreatedAt:   createdAt,
@@ -439,6 +442,7 @@ func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error
 							Type:        "expense",
 							GroupID:     group.ID,
 							GroupName:   group.Name,
+							ExpenseID:   expenseID,
 							Description: desc,
 							Amount:      remaining,
 							CreatedAt:   createdAt,
@@ -448,6 +452,7 @@ func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error
 							Type:        "expense",
 							GroupID:     group.ID,
 							GroupName:   group.Name,
+							ExpenseID:   expenseID,
 							Description: desc,
 							Amount:      -remaining,
 							CreatedAt:   createdAt,
