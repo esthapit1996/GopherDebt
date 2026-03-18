@@ -533,3 +533,62 @@ func (h *ExpenseHandler) ClearAllExpenses(c *gin.Context) {
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: fmt.Sprintf("Cleared %d expenses", deleted)})
 }
+
+func (h *ExpenseHandler) MarkExpensePaid(c *gin.Context) {
+	userID := c.GetInt("userID")
+	groupID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid group ID"})
+		return
+	}
+
+	expenseID, err := strconv.Atoi(c.Param("expenseID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: "Invalid expense ID"})
+		return
+	}
+
+	isMember, err := db.IsGroupMember(h.DB, groupID, userID)
+	if err != nil {
+		log.Printf("ERROR MarkExpensePaid: IsGroupMember group %d, user %d: %v", groupID, userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify group membership"})
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "You are not a member of this group"})
+		return
+	}
+
+	expense, err := db.GetExpenseByID(h.DB, expenseID)
+	if err == db.ErrNotFound {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Expense not found"})
+		return
+	}
+	if err != nil {
+		log.Printf("ERROR MarkExpensePaid: GetExpenseByID %d: %v", expenseID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to fetch expense"})
+		return
+	}
+
+	if expense.GroupID != groupID {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Expense not found in this group"})
+		return
+	}
+
+	var req struct {
+		IsPaid bool `json:"is_paid"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
+		return
+	}
+
+	if err := db.MarkExpensePaid(h.DB, expenseID, req.IsPaid); err != nil {
+		log.Printf("ERROR MarkExpensePaid: MarkExpensePaid %d: %v", expenseID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to update expense"})
+		return
+	}
+
+	updated, _ := db.GetExpenseByID(h.DB, expenseID)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Expense updated successfully", Data: updated})
+}

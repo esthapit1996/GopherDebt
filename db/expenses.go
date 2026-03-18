@@ -17,9 +17,9 @@ func CreateExpense(db *sql.DB, groupID, paidBy int, amount float64, description,
 
 	var expense models.Expense
 	err = tx.QueryRow(
-		`INSERT INTO expenses (group_id, paid_by, amount, description, split_type) VALUES ($1, $2, $3, $4, $5) RETURNING id, group_id, paid_by, amount, description, split_type, created_at, updated_at`,
+		`INSERT INTO expenses (group_id, paid_by, amount, description, split_type) VALUES ($1, $2, $3, $4, $5) RETURNING id, group_id, paid_by, amount, description, split_type, COALESCE(is_paid, false), created_at, updated_at`,
 		groupID, paidBy, amount, description, splitType,
-	).Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.CreatedAt, &expense.UpdatedAt)
+	).Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.IsPaid, &expense.CreatedAt, &expense.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -41,9 +41,9 @@ func GetExpenseByID(d *sql.DB, expenseID int) (*models.Expense, error) {
 	return retry("GetExpenseByID", func() (*models.Expense, error) {
 		var expense models.Expense
 		err := d.QueryRow(
-			`SELECT id, group_id, paid_by, amount, description, split_type, created_at, updated_at FROM expenses WHERE id = $1`,
+			`SELECT id, group_id, paid_by, amount, description, split_type, COALESCE(is_paid, false), created_at, updated_at FROM expenses WHERE id = $1`,
 			expenseID,
-		).Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.CreatedAt, &expense.UpdatedAt)
+		).Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.IsPaid, &expense.CreatedAt, &expense.UpdatedAt)
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -68,7 +68,7 @@ func GetExpenseByID(d *sql.DB, expenseID int) (*models.Expense, error) {
 func GetGroupExpenses(d *sql.DB, groupID int) ([]models.Expense, error) {
 	return retry("GetGroupExpenses", func() ([]models.Expense, error) {
 		rows, err := d.Query(
-			`SELECT e.id, e.group_id, e.paid_by, e.amount, e.description, e.split_type, e.created_at, e.updated_at, u.id, u.email, u.name, COALESCE(u.avatar, '')
+			`SELECT e.id, e.group_id, e.paid_by, e.amount, e.description, e.split_type, COALESCE(e.is_paid, false), e.created_at, e.updated_at, u.id, u.email, u.name, COALESCE(u.avatar, '')
 			 FROM expenses e LEFT JOIN users u ON e.paid_by = u.id WHERE e.group_id = $1 ORDER BY e.created_at DESC`,
 			groupID,
 		)
@@ -81,7 +81,7 @@ func GetGroupExpenses(d *sql.DB, groupID int) ([]models.Expense, error) {
 		for rows.Next() {
 			var expense models.Expense
 			var payer models.User
-			if err := rows.Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.CreatedAt, &expense.UpdatedAt, &payer.ID, &payer.Email, &payer.Name, &payer.Avatar); err != nil {
+			if err := rows.Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.IsPaid, &expense.CreatedAt, &expense.UpdatedAt, &payer.ID, &payer.Email, &payer.Name, &payer.Avatar); err != nil {
 				return nil, err
 			}
 			expense.PaidByUser = &payer
@@ -176,7 +176,7 @@ func batchFetchSplits(d *sql.DB, expenses []models.Expense) error {
 func GetUnpaidExpensesForUser(d *sql.DB, groupID, userID int) ([]models.Expense, error) {
 	return retry("GetUnpaidExpensesForUser", func() ([]models.Expense, error) {
 		rows, err := d.Query(
-			`SELECT e.id, e.group_id, e.paid_by, e.amount, e.description, e.split_type, e.created_at, e.updated_at,
+			`SELECT e.id, e.group_id, e.paid_by, e.amount, e.description, e.split_type, COALESCE(e.is_paid, false), e.created_at, e.updated_at,
 				u.id, u.email, u.name, COALESCE(u.avatar, '')
 			FROM expenses e
 			LEFT JOIN users u ON e.paid_by = u.id
@@ -196,7 +196,7 @@ func GetUnpaidExpensesForUser(d *sql.DB, groupID, userID int) ([]models.Expense,
 		for rows.Next() {
 			var expense models.Expense
 			var payer models.User
-			if err := rows.Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.CreatedAt, &expense.UpdatedAt, &payer.ID, &payer.Email, &payer.Name, &payer.Avatar); err != nil {
+			if err := rows.Scan(&expense.ID, &expense.GroupID, &expense.PaidBy, &expense.Amount, &expense.Description, &expense.SplitType, &expense.IsPaid, &expense.CreatedAt, &expense.UpdatedAt, &payer.ID, &payer.Email, &payer.Name, &payer.Avatar); err != nil {
 				return nil, err
 			}
 			expense.PaidByUser = &payer
@@ -268,4 +268,20 @@ func UpdateExpense(db *sql.DB, expenseID, paidBy int, amount float64, descriptio
 	}
 
 	return tx.Commit()
+}
+
+// MarkExpensePaid toggles the is_paid status of an expense.
+func MarkExpensePaid(db *sql.DB, expenseID int, isPaid bool) error {
+	res, err := db.Exec(`UPDATE expenses SET is_paid = $1, updated_at = NOW() WHERE id = $2`, isPaid, expenseID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

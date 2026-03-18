@@ -158,6 +158,7 @@ func main() {
 		api.GET("/groups/:id/expenses/unpaid", expenseHandler.GetUnpaidExpenses)
 		api.GET("/groups/:id/expenses/:expenseID", expenseHandler.GetExpense)
 		api.DELETE("/groups/:id/expenses/:expenseID", expenseHandler.DeleteExpense)
+		api.PUT("/groups/:id/expenses/:expenseID/paid", expenseHandler.MarkExpensePaid)
 		api.DELETE("/groups/:id/expenses", expenseHandler.ClearAllExpenses)
 
 		// Expense payment routes (partial repayments)

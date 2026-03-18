@@ -86,6 +86,7 @@ type Expense struct {
 	Amount      float64        `json:"amount"`
 	Description string         `json:"description"`
 	SplitType   string         `json:"split_type"`
+	IsPaid      bool           `json:"is_paid"`
 	Splits      []ExpenseSplit `json:"splits,omitempty"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`

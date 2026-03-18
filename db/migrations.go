@@ -202,6 +202,8 @@ func RunMigrations(db *sql.DB) error {
 		`DO $$ BEGIN CREATE POLICY email_whitelist_app_access ON email_whitelist USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE email_blacklist ENABLE ROW LEVEL SECURITY`,
 		`DO $$ BEGIN CREATE POLICY email_blacklist_app_access ON email_blacklist USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		// Add is_paid column to expenses table
+		`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE`,
 		`ALTER TABLE stash_expenses ENABLE ROW LEVEL SECURITY`,
 		`DO $$ BEGIN CREATE POLICY stash_expenses_app_access ON stash_expenses USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 	}
