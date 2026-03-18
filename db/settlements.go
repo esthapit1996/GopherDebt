@@ -371,7 +371,8 @@ func GetDebtOverview(d *sql.DB, userID int) ([]DebtOverviewItem, error) {
 
 // DebtDetailItem represents a single expense/settlement contributing to a debt between two users
 type DebtDetailItem struct {
-	Type        string    `json:"type"` // "expense", "settlement", "payment"
+	Type        string    `json:"type"` // "expense", "settlement", "settled"
+	GroupID     int       `json:"group_id"`
 	GroupName   string    `json:"group_name"`
 	Description string    `json:"description"`
 	Amount      float64   `json:"amount"` // Positive = they owe you, Negative = you owe them
@@ -423,6 +424,7 @@ func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error
 					if totalPaid >= splitAmount-0.01 {
 						items = append(items, DebtDetailItem{
 							Type:        "settled",
+							GroupID:     group.ID,
 							GroupName:   group.Name,
 							Description: desc,
 							Amount:      0,
@@ -435,6 +437,7 @@ func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error
 					if paidBy == userID {
 						items = append(items, DebtDetailItem{
 							Type:        "expense",
+							GroupID:     group.ID,
 							GroupName:   group.Name,
 							Description: desc,
 							Amount:      remaining,
@@ -443,6 +446,7 @@ func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error
 					} else {
 						items = append(items, DebtDetailItem{
 							Type:        "expense",
+							GroupID:     group.ID,
 							GroupName:   group.Name,
 							Description: desc,
 							Amount:      -remaining,
@@ -475,6 +479,7 @@ func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error
 					if paidBy == userID {
 						items = append(items, DebtDetailItem{
 							Type:        "settlement",
+							GroupID:     group.ID,
 							GroupName:   group.Name,
 							Description: "Settlement",
 							Amount:      amount,
@@ -483,6 +488,7 @@ func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error
 					} else {
 						items = append(items, DebtDetailItem{
 							Type:        "settlement",
+							GroupID:     group.ID,
 							GroupName:   group.Name,
 							Description: "Settlement",
 							Amount:      -amount,
