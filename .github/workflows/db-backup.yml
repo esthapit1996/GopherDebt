@@ -1,0 +1,66 @@
+name: Database Backup
+
+on:
+  schedule:
+    # Every day at 03:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  backup:
+    name: Backup database
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          FILENAME="backup_$(date +%Y%m%d_%H%M%S).sql.gz"
+          echo "FILENAME=$FILENAME" >> $GITHUB_ENV
+          pg_dump "$DATABASE_URL" --no-owner --clean --if-exists | gzip > "$FILENAME"
+          echo "Backup size: $(du -h "$FILENAME" | cut -f1)"
+
+      - name: Upload to Supabase Storage
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          curl -f -X POST \
+            "${SUPABASE_URL}/storage/v1/object/db-backups/${FILENAME}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary @"${FILENAME}"
+          echo "Uploaded ${FILENAME} to Supabase Storage"
+
+      - name: Clean up old backups (keep last 7)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          # List all files in the bucket
+          FILES=$(curl -s -X POST \
+            "${SUPABASE_URL}/storage/v1/object/list/db-backups" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"prefix":"","limit":100,"offset":0,"sortBy":{"column":"name","order":"asc"}}')
+
+          # Count files and delete oldest if more than 7
+          COUNT=$(echo "$FILES" | jq 'length')
+          echo "Total backups: $COUNT"
+
+          if [ "$COUNT" -gt 7 ]; then
+            DELETE_COUNT=$((COUNT - 7))
+            echo "Deleting $DELETE_COUNT old backup(s)"
+            TO_DELETE=$(echo "$FILES" | jq -r ".[0:${DELETE_COUNT}][].name")
+            for FILE in $TO_DELETE; do
+              curl -s -X DELETE \
+                "${SUPABASE_URL}/storage/v1/object/db-backups/${FILE}" \
+                -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}"
+              echo "Deleted: $FILE"
+            done
+          fi
