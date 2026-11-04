@@ -105,12 +105,6 @@ func main() {
 		})
 	})
 
-	// Admin: Reset all financial data (keep users and groups)
-	r.POST("/admin/reset-finances", func(c *gin.Context) {
-		database.Exec("TRUNCATE settlements, expense_payments, expense_splits, expenses RESTART IDENTITY CASCADE")
-		c.JSON(200, gin.H{"message": "All expenses, payments, and settlements cleared"})
-	})
-
 	// Health check — actually ping DB so we detect stale connections
 	r.GET("/health", func(c *gin.Context) {
 		if err := database.Ping(); err != nil {
