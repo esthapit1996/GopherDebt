@@ -148,6 +148,10 @@ type RateLimiter struct {
 6. Background goroutine cleans stale entries every minute
 ```
 
+### Client IP
+
+The IP comes from `c.ClientIP()`. `main.go` sets `r.SetTrustedProxies(nil)` and `r.TrustedPlatform = "Fly-Client-IP"`, so the limiter uses the `Fly-Client-IP` header set by Fly's proxy (falling back to the TCP remote address). Client-supplied `X-Forwarded-For` is ignored, so it cannot be spoofed to bypass the limit.
+
 ### Usage in main.go
 
 ```go

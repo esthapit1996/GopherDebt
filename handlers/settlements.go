@@ -188,7 +188,7 @@ func (h *SettlementHandler) DeleteSettlement(c *gin.Context) {
 		return
 	}
 
-	err = db.DeleteSettlement(h.DB, settlementID)
+	err = db.DeleteSettlement(h.DB, groupID, settlementID)
 	if err == db.ErrNotFound {
 		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "Settlement not found"})
 		return
