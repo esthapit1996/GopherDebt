@@ -73,7 +73,7 @@ Request → [AuthMiddleware] → Handler
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `JWT_SECRET` | `"your-secret-key-change-in-production"` | Secret key for signing JWTs |
+| `JWT_SECRET` | — (required) | Secret key for signing JWTs; server exits at startup if unset, middleware returns 500 |
 
 ### Usage in Handlers
 

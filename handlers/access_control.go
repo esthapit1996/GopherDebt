@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -192,4 +193,26 @@ func (h *AccessControlHandler) RemoveFromBlacklist(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: "Removed successfully"})
+}
+
+// ResetFinances clears all expenses, payments and settlements (founder only)
+func (h *AccessControlHandler) ResetFinances(c *gin.Context) {
+	requesterID := c.GetInt("userID")
+	requester, err := db.GetUserByID(h.DB, requesterID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to verify requester"})
+		return
+	}
+	if requester.Email != db.FounderEmail {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "Only the founder can reset finances"})
+		return
+	}
+
+	if err := db.ResetFinances(h.DB); err != nil {
+		log.Printf("ERROR ResetFinances: user %d: %v", requesterID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to reset finances"})
+		return
+	}
+	log.Printf("ResetFinances: all financial data cleared by user %d", requesterID)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "All expenses, payments, and settlements cleared"})
 }

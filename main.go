@@ -17,6 +17,10 @@ import (
 )
 
 func main() {
+	if os.Getenv("JWT_SECRET") == "" {
+		log.Fatal("JWT_SECRET environment variable is required")
+	}
+
 	// Database connection
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
@@ -103,12 +107,6 @@ func main() {
 				"docs":     "See /api/* for protected endpoints",
 			},
 		})
-	})
-
-	// Admin: Reset all financial data (keep users and groups)
-	r.POST("/admin/reset-finances", func(c *gin.Context) {
-		database.Exec("TRUNCATE settlements, expense_payments, expense_splits, expenses RESTART IDENTITY CASCADE")
-		c.JSON(200, gin.H{"message": "All expenses, payments, and settlements cleared"})
 	})
 
 	// Health check — actually ping DB so we detect stale connections
@@ -218,6 +216,9 @@ func main() {
 		api.GET("/blacklist", accessControlHandler.GetBlacklist)
 		api.POST("/blacklist", accessControlHandler.AddToBlacklist)
 		api.DELETE("/blacklist/:id", accessControlHandler.RemoveFromBlacklist)
+
+		// Admin routes (founder only)
+		api.POST("/admin/reset-finances", accessControlHandler.ResetFinances)
 	}
 
 	// Start server

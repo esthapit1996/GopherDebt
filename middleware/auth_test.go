@@ -125,23 +125,21 @@ func TestWrongSecret(t *testing.T) {
 	}
 }
 
-func TestFallbackSecret(t *testing.T) {
+func TestMissingSecretRejectsOldFallback(t *testing.T) {
 	os.Unsetenv("JWT_SECRET")
 
 	tok := makeToken(7, "your-secret-key-change-in-production", time.Hour)
 
 	r := gin.New()
-	r.GET("/t", AuthMiddleware(), func(c *gin.Context) {
-		c.JSON(200, gin.H{"user_id": c.GetInt("userID")})
-	})
+	r.GET("/t", AuthMiddleware(), func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/t", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
 	r.ServeHTTP(w, req)
 
-	if w.Code != 200 {
-		t.Fatalf("want 200 with fallback secret, got %d", w.Code)
+	if w.Code != 500 {
+		t.Fatalf("want 500 when JWT_SECRET is unset, got %d", w.Code)
 	}
 }
 

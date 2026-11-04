@@ -152,3 +152,9 @@ func RemoveFromBlacklist(db *sql.DB, id int) error {
 	}
 	return nil
 }
+
+// ResetFinances truncates all expenses, payments and settlements (users and groups are kept)
+func ResetFinances(db *sql.DB) error {
+	_, err := db.Exec(`TRUNCATE settlements, expense_payments, expense_splits, expenses RESTART IDENTITY CASCADE`)
+	return err
+}
