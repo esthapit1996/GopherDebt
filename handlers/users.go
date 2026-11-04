@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -330,7 +331,7 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 func generateJWT(userID int) (string, error) {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		secret = "your-secret-key-change-in-production"
+		return "", errors.New("JWT_SECRET is not set")
 	}
 
 	claims := jwt.MapClaims{

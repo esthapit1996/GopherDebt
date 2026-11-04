@@ -284,6 +284,7 @@ All access control endpoints verify the requester is the founder before proceedi
 | GET | `/api/blacklist` | `GetBlacklist` | List all blacklisted emails |
 | POST | `/api/blacklist` | `AddToBlacklist` | Add email to blacklist (cannot blacklist founder) |
 | DELETE | `/api/blacklist/:id` | `RemoveFromBlacklist` | Remove from blacklist |
+| POST | `/api/admin/reset-finances` | `ResetFinances` | Truncate all expenses, payments and settlements (keeps users and groups) |
 
 ---
 

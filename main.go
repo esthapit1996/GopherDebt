@@ -17,6 +17,10 @@ import (
 )
 
 func main() {
+	if os.Getenv("JWT_SECRET") == "" {
+		log.Fatal("JWT_SECRET environment variable is required")
+	}
+
 	// Database connection
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
@@ -212,6 +216,9 @@ func main() {
 		api.GET("/blacklist", accessControlHandler.GetBlacklist)
 		api.POST("/blacklist", accessControlHandler.AddToBlacklist)
 		api.DELETE("/blacklist/:id", accessControlHandler.RemoveFromBlacklist)
+
+		// Admin routes (founder only)
+		api.POST("/admin/reset-finances", accessControlHandler.ResetFinances)
 	}
 
 	// Start server

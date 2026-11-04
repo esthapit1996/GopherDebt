@@ -35,7 +35,7 @@ go build -o gopherdebt .
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | No | — | Full PostgreSQL connection string (overrides `DB_PASSWORD`) |
 | `DB_PASSWORD` | Yes* | — | Supabase DB password (*required if `DATABASE_URL` is not set) |
-| `JWT_SECRET` | No | `"your-secret-key-change-in-production"` | Secret key for JWT token signing |
+| `JWT_SECRET` | Yes | — | Secret key for JWT token signing (server refuses to start without it) |
 | `PORT` | No | `8080` | Server port |
 | `GEMINI_API_KEY` | No | — | Google Gemini API key for receipt scanning |
 
@@ -165,6 +165,7 @@ go build -o gopherdebt .
 | GET | `/api/blacklist` | Get blacklisted emails |
 | POST | `/api/blacklist` | Add email to blacklist |
 | DELETE | `/api/blacklist/:id` | Remove from blacklist |
+| POST | `/api/admin/reset-finances` | Clear all expenses, payments and settlements (keeps users and groups) |
 
 ## Request Examples
 
