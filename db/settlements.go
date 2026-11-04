@@ -42,8 +42,8 @@ func GetGroupSettlements(d *sql.DB, groupID int) ([]models.Settlement, error) {
 	})
 }
 
-func DeleteSettlement(db *sql.DB, settlementID int) error {
-	result, err := db.Exec(`DELETE FROM settlements WHERE id = $1`, settlementID)
+func DeleteSettlement(db *sql.DB, groupID, settlementID int) error {
+	result, err := db.Exec(`DELETE FROM settlements WHERE id = $1 AND group_id = $2`, settlementID, groupID)
 	if err != nil {
 		return err
 	}

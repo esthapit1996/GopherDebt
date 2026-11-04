@@ -75,6 +75,12 @@ func main() {
 	// Setup router
 	r := gin.Default()
 
+	// Client IP for rate limiting: trust only Fly's proxy-set header, never client-supplied X-Forwarded-For
+	if err := r.SetTrustedProxies(nil); err != nil {
+		log.Fatal("Failed to set trusted proxies:", err)
+	}
+	r.TrustedPlatform = "Fly-Client-IP"
+
 	// CORS middleware and cache prevention
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
