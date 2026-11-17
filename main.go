@@ -71,6 +71,7 @@ func main() {
 	accessControlHandler := handlers.NewAccessControlHandler(database)
 	receiptHandler := handlers.NewReceiptHandler()
 	stashHandler := handlers.NewStashHandler(database)
+	wishHandler := handlers.NewWishHandler(database)
 
 	// Setup router
 	r := gin.Default()
@@ -214,6 +215,12 @@ func main() {
 		api.DELETE("/stash/:id", stashHandler.DeleteStashExpense)
 		api.GET("/stash/summary", stashHandler.GetStashSummary)
 		api.DELETE("/stash", stashHandler.ClearStashExpenses)
+
+		// GoWish routes (personal wishlist)
+		api.GET("/wish", wishHandler.GetWishItems)
+		api.POST("/wish", wishHandler.CreateWishItem)
+		api.PUT("/wish/:id", wishHandler.UpdateWishItem)
+		api.DELETE("/wish/:id", wishHandler.DeleteWishItem)
 
 		// Access control routes (whitelist/blacklist)
 		api.GET("/whitelist", accessControlHandler.GetWhitelist)

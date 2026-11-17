@@ -212,6 +212,23 @@ type StashSummary struct {
 	ByCategory   map[string]float64 `json:"by_category"`
 }
 
+// WishItem represents something the user wants to buy, tracked in GoWish
+type WishItem struct {
+	ID        int       `json:"id"`
+	UserID    int       `json:"user_id"`
+	Name      string    `json:"name"`
+	Link      string    `json:"link"`
+	Cost      float64   `json:"cost"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// WishItemRequest is the payload for adding or updating a GoWish item
+type WishItemRequest struct {
+	Name string  `json:"name" binding:"required,max=255"`
+	Link string  `json:"link" binding:"max=2048"`
+	Cost float64 `json:"cost" binding:"required,gt=0"`
+}
+
 // APIResponse is a standard API response wrapper
 type APIResponse struct {
 	Success bool        `json:"success"`

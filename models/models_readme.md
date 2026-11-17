@@ -200,6 +200,16 @@ These define the expected JSON payload for API requests.
 | `Description` | `string` | `max=255` | Optional (defaults to category name or "Expense") |
 | `Category` | `string` | `max=50` | Optional category tag |
 
+### WishItemRequest
+
+Used for both creating and updating a GoWish item.
+
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `Name` | `string` | `required,max=255` | What you want to buy |
+| `Link` | `string` | `max=2048` | Optional; must be an `http(s)://` URL (checked in the handler) |
+| `Cost` | `float64` | `required,gt=0` | Must be positive |
+
 ---
 
 ## 📤 Response Models
@@ -245,6 +255,17 @@ These define the expected JSON payload for API requests.
 | `TotalSpent` | `float64` | `total_spent` | Sum of all expenses |
 | `ExpenseCount` | `int` | `expense_count` | Number of expenses |
 | `ByCategory` | `map[string]float64` | `by_category` | Total per category |
+
+### WishItem (GoWish)
+
+| Field | Type | JSON Tag | Description |
+|-------|------|----------|-------------|
+| `ID` | `int` | `id` | Primary key |
+| `UserID` | `int` | `user_id` | Owner of this item |
+| `Name` | `string` | `name` | What you want to buy |
+| `Link` | `string` | `link` | Where to buy it (empty if not set) |
+| `Cost` | `float64` | `cost` | Price |
+| `CreatedAt` | `time.Time` | `created_at` | When item was added |
 
 ---
 

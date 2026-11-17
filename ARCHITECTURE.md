@@ -38,12 +38,13 @@ GopherDebt/
 │   ├── activity.go      # Activity logging
 │   ├── suggestions.go   # Suggestion box
 │   ├── stash.go         # GopherStash personal expenses
+│   ├── wish.go          # GoWish wishlist
 │   ├── access_control.go # Email whitelist/blacklist
 │   ├── retry.go         # Generic retry with backoff
 │   └── migrations.go    # Schema creation
 ├── handlers/            # HTTP endpoint controllers
 │   ├── handlers_readme.md   # 📖 Documentation
-│   ├── handlers_test.go # 31 handler tests
+│   ├── handlers_test.go # Handler tests (+ stash_test.go, wish_test.go)
 │   ├── users.go         # Auth & profile endpoints
 │   ├── groups.go        # Group endpoints
 │   ├── expenses.go      # Expense endpoints
@@ -53,6 +54,7 @@ GopherDebt/
 │   ├── suggestions.go   # Suggestion box endpoints
 │   ├── currency.go      # Currency conversion endpoints
 │   ├── stash.go         # GopherStash endpoints
+│   ├── wish.go          # GoWish endpoints
 │   ├── access_control.go # Whitelist/blacklist (founder only)
 │   └── receipt.go       # AI receipt scanning (Gemini proxy)
 ├── middleware/          # Request processing
@@ -100,6 +102,7 @@ Creates all tables if they don't exist (safe to run multiple times).
 userHandler := handlers.NewUserHandler(database)
 groupHandler := handlers.NewGroupHandler(database)
 stashHandler := handlers.NewStashHandler(database)
+wishHandler := handlers.NewWishHandler(database)
 receiptHandler := handlers.NewReceiptHandler()
 // ... each handler gets the database connection
 ```
@@ -200,6 +203,17 @@ Starts listening for HTTP requests.
 │ description      │   │ created_at       │   │ added_by (FK)    │
 │ category         │   └──────────────────┘   │ created_at       │
 │ created_at       │                          └──────────────────┘
+└──────────────────┘
+
+┌──────────────────┐
+│ wish_items       │
+├──────────────────┤
+│ id (PK)          │
+│ user_id (FK)     │
+│ name             │
+│ link             │
+│ cost             │
+│ created_at       │
 └──────────────────┘
 ```
 

@@ -25,6 +25,7 @@ This folder contains all database operations for GopherDebt. Each file handles C
 | `activity.go` | Activity logging for group history |
 | `suggestions.go` | Suggestion box with voting and comments |
 | `stash.go` | GopherStash personal expense tracking |
+| `wish.go` | GoWish personal wishlist |
 | `access_control.go` | Email whitelist/blacklist management |
 | `retry.go` | Generic retry with backoff for transient DB errors |
 | `migrations.go` | Database schema creation and updates |
@@ -174,6 +175,7 @@ For each expense_payment:
 | `suggestion_votes` | Anonymous voting on suggestions |
 | `suggestion_comments` | Comments on suggestions |
 | `stash_expenses` | GopherStash personal expenses |
+| `wish_items` | GoWish wishlist items |
 | `email_whitelist` | Approved registration emails |
 | `email_blacklist` | Blocked registration emails |
 
@@ -225,9 +227,23 @@ if err != nil {
 |----------|------------|---------|-------------|
 | `CreateStashExpense` | `db *sql.DB, userID int, amount float64, description, category string` | `*models.StashExpense, error` | Adds a personal expense to the user's stash |
 | `GetStashExpenses` | `db *sql.DB, userID int` | `[]models.StashExpense, error` | Returns all personal expenses for a user (newest first) |
+| `UpdateStashExpense` | `db *sql.DB, expenseID, userID int, amount float64, description, category string` | `*models.StashExpense, error` | Updates a personal expense (only if owned by user) |
 | `DeleteStashExpense` | `db *sql.DB, expenseID, userID int` | `error` | Removes a personal expense (only if owned by user) |
 | `GetStashSummary` | `db *sql.DB, userID int` | `*models.StashSummary, error` | Total spent + breakdown by category |
 | `ClearStashExpenses` | `db *sql.DB, userID int` | `error` | Removes all personal expenses for a user |
+
+---
+
+## 🔧 wish.go
+
+### Functions
+
+| Function | Parameters | Returns | Description |
+|----------|------------|---------|-------------|
+| `CreateWishItem` | `db *sql.DB, userID int, name, link string, cost float64` | `*models.WishItem, error` | Adds an item to the user's wishlist |
+| `GetWishItems` | `db *sql.DB, userID int` | `[]models.WishItem, error` | Returns all wishlist items for a user (newest first) |
+| `UpdateWishItem` | `db *sql.DB, itemID, userID int, name, link string, cost float64` | `*models.WishItem, error` | Updates a wishlist item (only if owned by user) |
+| `DeleteWishItem` | `db *sql.DB, itemID, userID int` | `error` | Removes a wishlist item (only if owned by user) |
 
 ---
 
