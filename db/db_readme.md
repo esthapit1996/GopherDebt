@@ -264,7 +264,7 @@ All personal functions only touch wishes with `list_id IS NULL`.
 | `RenameWishList` | `db *sql.DB, listID int, name string` | `error` | Renames a group |
 | `IsWishListMember` | `db *sql.DB, listID, userID int` | `bool, error` | Membership check |
 | `AddWishListMember` | `db *sql.DB, listID, userID int` | `error` | Adds a member; `ErrAlreadyMember` if already in |
-| `RemoveWishListMember` | `db *sql.DB, listID, userID int` | `bool, error` | Removes a member; deletes the group (and its wishes) when the last member leaves and returns `true` |
+| `RemoveWishListMember` | `db *sql.DB, listID, userID int` | `bool, error` | Removes a member and their wishes in the group; deletes the group when the last member leaves and returns `true` |
 | `GetWishListItems` | `db *sql.DB, listID int` | `[]models.WishItem, error` | Wishes in a group with `AddedBy`, newest first |
 | `CreateWishListItem` | `db *sql.DB, listID, userID int, name, why, link string, cost *float64` | `*models.WishItem, error` | Adds a wish to a group |
 | `UpdateWishListItem` | `db *sql.DB, listID, itemID int, name, why, link string, cost *float64` | `*models.WishItem, error` | Edits a wish in a group |
