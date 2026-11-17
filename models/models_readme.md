@@ -206,9 +206,10 @@ Used for both creating and updating a GoWish item.
 
 | Field | Type | Validation | Description |
 |-------|------|------------|-------------|
-| `Name` | `string` | `required,max=255` | What you want to buy |
+| `Name` | `string` | `required,max=64` | What you want to buy |
+| `Why` | `string` | `max=128` | Optional reason you want it |
 | `Link` | `string` | `max=2048` | Optional; must be an `http(s)://` URL (checked in the handler) |
-| `Cost` | `float64` | `required,gt=0` | Must be positive |
+| `Cost` | `*float64` | `omitempty,gt=0` | Optional; `null` means no price, otherwise must be positive |
 
 ---
 
@@ -263,8 +264,9 @@ Used for both creating and updating a GoWish item.
 | `ID` | `int` | `id` | Primary key |
 | `UserID` | `int` | `user_id` | Owner of this item |
 | `Name` | `string` | `name` | What you want to buy |
+| `Why` | `string` | `why` | Why you want it (empty if not set) |
 | `Link` | `string` | `link` | Where to buy it (empty if not set) |
-| `Cost` | `float64` | `cost` | Price |
+| `Cost` | `*float64` | `cost` | Price, or `null` if not set |
 | `CreatedAt` | `time.Time` | `created_at` | When item was added |
 
 ---

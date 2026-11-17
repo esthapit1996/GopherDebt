@@ -211,8 +211,9 @@ Starts listening for HTTP requests.
 │ id (PK)          │
 │ user_id (FK)     │
 │ name             │
+│ why              │
 │ link             │
-│ cost             │
+│ cost (nullable)  │
 │ created_at       │
 └──────────────────┘
 ```

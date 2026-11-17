@@ -218,6 +218,9 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_wish_items_user_id ON wish_items(user_id)`,
 		`ALTER TABLE wish_items ENABLE ROW LEVEL SECURITY`,
 		`DO $$ BEGIN CREATE POLICY wish_items_app_access ON wish_items USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		// GoWish: optional "why" note and optional cost. Name/why length caps (64/128) are enforced by the API.
+		`ALTER TABLE wish_items ADD COLUMN IF NOT EXISTS why VARCHAR(128) DEFAULT ''`,
+		`ALTER TABLE wish_items ALTER COLUMN cost DROP NOT NULL`,
 	}
 
 	for i, migration := range migrations {

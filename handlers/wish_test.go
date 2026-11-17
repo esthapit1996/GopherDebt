@@ -47,17 +47,21 @@ func TestBindWishItem(t *testing.T) {
 		body string
 		want int
 	}{
-		{"valid all fields", `{"name":"Switch 2","link":"https://example.com/switch","cost":449.99}`, http.StatusCreated},
-		{"valid no link", `{"name":"Switch 2","cost":449.99}`, http.StatusCreated},
+		{"valid all fields", `{"name":"Switch 2","why":"Mario Kart","link":"https://example.com/switch","cost":449.99}`, http.StatusCreated},
+		{"name only", `{"name":"Switch 2"}`, http.StatusCreated},
+		{"null cost", `{"name":"Switch 2","cost":null}`, http.StatusCreated},
 		{"empty body", `{}`, http.StatusBadRequest},
 		{"missing name", `{"cost":10}`, http.StatusBadRequest},
 		{"whitespace name", `{"name":"   ","cost":10}`, http.StatusBadRequest},
-		{"missing cost", `{"name":"Switch 2"}`, http.StatusBadRequest},
 		{"zero cost", `{"name":"Switch 2","cost":0}`, http.StatusBadRequest},
 		{"negative cost", `{"name":"Switch 2","cost":-5}`, http.StatusBadRequest},
-		{"javascript link", `{"name":"x","link":"javascript:alert(1)","cost":1}`, http.StatusBadRequest},
-		{"name too long", `{"name":"` + strings.Repeat("a", 256) + `","cost":1}`, http.StatusBadRequest},
-		{"link too long", `{"name":"x","link":"https://e.com/` + strings.Repeat("a", 2048) + `","cost":1}`, http.StatusBadRequest},
+		{"javascript link", `{"name":"x","link":"javascript:alert(1)"}`, http.StatusBadRequest},
+		{"name at limit", `{"name":"` + strings.Repeat("a", 64) + `"}`, http.StatusCreated},
+		{"name at limit multibyte", `{"name":"` + strings.Repeat("è", 64) + `"}`, http.StatusCreated},
+		{"name too long", `{"name":"` + strings.Repeat("a", 65) + `"}`, http.StatusBadRequest},
+		{"why at limit", `{"name":"x","why":"` + strings.Repeat("a", 128) + `"}`, http.StatusCreated},
+		{"why too long", `{"name":"x","why":"` + strings.Repeat("a", 129) + `"}`, http.StatusBadRequest},
+		{"link too long", `{"name":"x","link":"https://e.com/` + strings.Repeat("a", 2048) + `"}`, http.StatusBadRequest},
 	}
 	r := wishBindRouter()
 	for _, tc := range cases {
