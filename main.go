@@ -72,6 +72,7 @@ func main() {
 	receiptHandler := handlers.NewReceiptHandler()
 	stashHandler := handlers.NewStashHandler(database)
 	wishHandler := handlers.NewWishHandler(database)
+	wishListHandler := handlers.NewWishListHandler(database)
 
 	// Setup router
 	r := gin.Default()
@@ -221,6 +222,18 @@ func main() {
 		api.POST("/wish", wishHandler.CreateWishItem)
 		api.PUT("/wish/:id", wishHandler.UpdateWishItem)
 		api.DELETE("/wish/:id", wishHandler.DeleteWishItem)
+
+		// GoWish shared lists (separate from debt groups; every member has full access)
+		api.GET("/wish-lists", wishListHandler.GetWishLists)
+		api.POST("/wish-lists", wishListHandler.CreateWishList)
+		api.GET("/wish-lists/:id", wishListHandler.GetWishList)
+		api.PUT("/wish-lists/:id", wishListHandler.RenameWishList)
+		api.POST("/wish-lists/:id/members", wishListHandler.AddMember)
+		api.DELETE("/wish-lists/:id/members/:userId", wishListHandler.RemoveMember)
+		api.GET("/wish-lists/:id/items", wishListHandler.GetItems)
+		api.POST("/wish-lists/:id/items", wishListHandler.CreateItem)
+		api.PUT("/wish-lists/:id/items/:itemId", wishListHandler.UpdateItem)
+		api.DELETE("/wish-lists/:id/items/:itemId", wishListHandler.DeleteItem)
 
 		// Access control routes (whitelist/blacklist)
 		api.GET("/whitelist", accessControlHandler.GetWhitelist)

@@ -211,6 +211,20 @@ Used for both creating and updating a GoWish item.
 | `Link` | `string` | `max=2048` | Optional; must be an `http(s)://` URL (checked in the handler) |
 | `Cost` | `*float64` | `omitempty,gt=0` | Optional; `null` means no price, otherwise must be positive |
 
+### WishListRequest
+
+Used for creating and renaming a shared wish group.
+
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `Name` | `string` | `required,max=64` | Group name (trimmed, must not be blank) |
+
+### WishListMemberRequest
+
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `UserID` | `int` | `required,gt=0` | User to add to the group |
+
 ---
 
 ## 📤 Response Models
@@ -262,12 +276,35 @@ Used for both creating and updating a GoWish item.
 | Field | Type | JSON Tag | Description |
 |-------|------|----------|-------------|
 | `ID` | `int` | `id` | Primary key |
-| `UserID` | `int` | `user_id` | Owner of this item |
+| `UserID` | `int` | `user_id` | Owner (personal) or who added it (shared) |
 | `Name` | `string` | `name` | What you want to buy |
 | `Why` | `string` | `why` | Why you want it (empty if not set) |
 | `Link` | `string` | `link` | Where to buy it (empty if not set) |
 | `Cost` | `*float64` | `cost` | Price, or `null` if not set |
 | `CreatedAt` | `time.Time` | `created_at` | When item was added |
+| `ListID` | `*int` | `list_id,omitempty` | Shared group ID (omitted for personal wishes) |
+| `AddedBy` | `*WishMember` | `added_by,omitempty` | Who added it (shared wishes only) |
+
+### WishMember
+
+Public view of a user in a shared wish group (no email).
+
+| Field | Type | JSON Tag | Description |
+|-------|------|----------|-------------|
+| `ID` | `int` | `id` | User ID |
+| `Name` | `string` | `name` | Display name |
+| `Avatar` | `string` | `avatar` | Avatar key |
+
+### WishList (GoWish shared group)
+
+| Field | Type | JSON Tag | Description |
+|-------|------|----------|-------------|
+| `ID` | `int` | `id` | Primary key |
+| `Name` | `string` | `name` | Group name |
+| `CreatedAt` | `time.Time` | `created_at` | When the group was created |
+| `Members` | `[]WishMember` | `members` | Members, in join order |
+| `ItemCount` | `int` | `item_count` | Number of wishes |
+| `TotalCost` | `float64` | `total_cost` | Sum of priced wishes |
 
 ---
 

@@ -31,9 +31,10 @@ Handlers are the **HTTP endpoint controllers**. They receive requests from the f
 | `currency.go` | Currency conversion | `/api/currency/*` |
 | `stash.go` | GopherStash personal expenses | `/api/stash/*` |
 | `wish.go` | GoWish personal wishlist | `/api/wish/*` |
+| `wish_lists.go` | GoWish shared wish groups | `/api/wish-lists/*` |
 | `access_control.go` | Email whitelist/blacklist | `/api/whitelist/*`, `/api/blacklist/*` |
 | `receipt.go` | AI receipt scanning | `/api/receipt/scan` |
-| `handlers_test.go`, `stash_test.go`, `wish_test.go` | Handler tests | — |
+| `handlers_test.go`, `stash_test.go`, `wish_test.go`, `wish_lists_test.go` | Handler tests | — |
 
 ---
 
@@ -289,6 +290,35 @@ type WishHandler struct {
 - `why` is trimmed and optional (max 128 characters)
 - `cost` is optional (`null` = no price); when set it must be > 0
 - `link` is optional; if set it must be an absolute `http`/`https` URL (max 2048). Other schemes such as `javascript:` are rejected because the frontend renders the link as an `href`.
+
+Personal endpoints only see wishes with `list_id IS NULL`, so shared wishes can't be read or changed through `/api/wish`.
+
+---
+
+## 🔧 wish_lists.go
+
+Shared GoWish groups, separate from debt groups. Every member has full access: rename, add/remove members, add/edit/delete any wish.
+
+### Endpoints
+
+| Method | Endpoint | Function | Description |
+|--------|----------|----------|-------------|
+| GET | `/api/wish-lists` | `GetWishLists` | Groups the caller belongs to |
+| POST | `/api/wish-lists` | `CreateWishList` | Create a group; caller becomes first member |
+| GET | `/api/wish-lists/:id` | `GetWishList` | Group with members |
+| PUT | `/api/wish-lists/:id` | `RenameWishList` | Rename |
+| POST | `/api/wish-lists/:id/members` | `AddMember` | Add a user (`409` if already a member) |
+| DELETE | `/api/wish-lists/:id/members/:userId` | `RemoveMember` | Remove a member or leave; returns `list_deleted` |
+| GET | `/api/wish-lists/:id/items` | `GetItems` | Wishes, each with `added_by` |
+| POST | `/api/wish-lists/:id/items` | `CreateItem` | Add a wish (validated like `/api/wish`) |
+| PUT | `/api/wish-lists/:id/items/:itemId` | `UpdateItem` | Edit any wish in the group |
+| DELETE | `/api/wish-lists/:id/items/:itemId` | `DeleteItem` | Delete any wish in the group |
+
+### Access rules
+
+- Every route checks membership first (`memberListID`). Non-members get `404`, so group IDs can't be probed.
+- Item queries filter on both item ID and `list_id`, so an item from another group can't be edited by guessing its ID.
+- When the last member leaves, the group and its wishes are deleted (in one transaction with a row lock, so two members leaving at once can't leave an orphan group).
 
 ---
 

@@ -38,13 +38,14 @@ GopherDebt/
 │   ├── activity.go      # Activity logging
 │   ├── suggestions.go   # Suggestion box
 │   ├── stash.go         # GopherStash personal expenses
-│   ├── wish.go          # GoWish wishlist
+│   ├── wish.go          # GoWish personal wishlist
+│   ├── wish_lists.go    # GoWish shared wish groups
 │   ├── access_control.go # Email whitelist/blacklist
 │   ├── retry.go         # Generic retry with backoff
 │   └── migrations.go    # Schema creation
 ├── handlers/            # HTTP endpoint controllers
 │   ├── handlers_readme.md   # 📖 Documentation
-│   ├── handlers_test.go # Handler tests (+ stash_test.go, wish_test.go)
+│   ├── handlers_test.go # Handler tests (+ stash_test.go, wish_test.go, wish_lists_test.go)
 │   ├── users.go         # Auth & profile endpoints
 │   ├── groups.go        # Group endpoints
 │   ├── expenses.go      # Expense endpoints
@@ -54,7 +55,8 @@ GopherDebt/
 │   ├── suggestions.go   # Suggestion box endpoints
 │   ├── currency.go      # Currency conversion endpoints
 │   ├── stash.go         # GopherStash endpoints
-│   ├── wish.go          # GoWish endpoints
+│   ├── wish.go          # GoWish personal endpoints
+│   ├── wish_lists.go    # GoWish shared group endpoints
 │   ├── access_control.go # Whitelist/blacklist (founder only)
 │   └── receipt.go       # AI receipt scanning (Gemini proxy)
 ├── middleware/          # Request processing
@@ -103,6 +105,7 @@ userHandler := handlers.NewUserHandler(database)
 groupHandler := handlers.NewGroupHandler(database)
 stashHandler := handlers.NewStashHandler(database)
 wishHandler := handlers.NewWishHandler(database)
+wishListHandler := handlers.NewWishListHandler(database)
 receiptHandler := handlers.NewReceiptHandler()
 // ... each handler gets the database connection
 ```
@@ -205,16 +208,17 @@ Starts listening for HTTP requests.
 │ created_at       │                          └──────────────────┘
 └──────────────────┘
 
-┌──────────────────┐
-│ wish_items       │
-├──────────────────┤
-│ id (PK)          │
-│ user_id (FK)     │
-│ name             │
-│ why              │
+┌──────────────────┐   ┌──────────────────┐   ┌───────────────────┐
+│ wish_items       │   │ wish_lists       │   │ wish_list_members │
+├──────────────────┤   ├──────────────────┤   ├───────────────────┤
+│ id (PK)          │   │ id (PK)          │   │ id (PK)           │
+│ user_id (FK)     │   │ name             │   │ list_id (FK)      │
+│ list_id (FK)     │   │ created_by (FK)  │   │ user_id (FK)      │
+│ name             │   │ created_at       │   │ joined_at         │
+│ why              │   └──────────────────┘   └───────────────────┘
 │ link             │
-│ cost (nullable)  │
-│ created_at       │
+│ cost (nullable)  │   wish_items.list_id NULL = personal wish (owned by user_id);
+│ created_at       │   set = shared wish (user_id = who added it)
 └──────────────────┘
 ```
 

@@ -26,6 +26,7 @@ This folder contains all database operations for GopherDebt. Each file handles C
 | `suggestions.go` | Suggestion box with voting and comments |
 | `stash.go` | GopherStash personal expense tracking |
 | `wish.go` | GoWish personal wishlist |
+| `wish_lists.go` | GoWish shared wish groups |
 | `access_control.go` | Email whitelist/blacklist management |
 | `retry.go` | Generic retry with backoff for transient DB errors |
 | `migrations.go` | Database schema creation and updates |
@@ -175,7 +176,9 @@ For each expense_payment:
 | `suggestion_votes` | Anonymous voting on suggestions |
 | `suggestion_comments` | Comments on suggestions |
 | `stash_expenses` | GopherStash personal expenses |
-| `wish_items` | GoWish wishlist items |
+| `wish_items` | GoWish wishes (`list_id` NULL = personal, set = in a shared group) |
+| `wish_lists` | GoWish shared wish groups |
+| `wish_list_members` | Members of each shared wish group |
 | `email_whitelist` | Approved registration emails |
 | `email_blacklist` | Blocked registration emails |
 
@@ -244,6 +247,28 @@ if err != nil {
 | `GetWishItems` | `db *sql.DB, userID int` | `[]models.WishItem, error` | Returns all wishlist items for a user (newest first) |
 | `UpdateWishItem` | `db *sql.DB, itemID, userID int, name, why, link string, cost *float64` | `*models.WishItem, error` | Updates a wishlist item (only if owned by user) |
 | `DeleteWishItem` | `db *sql.DB, itemID, userID int` | `error` | Removes a wishlist item (only if owned by user) |
+
+All personal functions only touch wishes with `list_id IS NULL`.
+
+---
+
+## 🔧 wish_lists.go
+
+### Functions
+
+| Function | Parameters | Returns | Description |
+|----------|------------|---------|-------------|
+| `CreateWishList` | `db *sql.DB, userID int, name string` | `*models.WishList, error` | Creates a group with the creator as first member (transaction) |
+| `GetUserWishLists` | `db *sql.DB, userID int` | `[]models.WishList, error` | Groups the user belongs to, newest first, with members, item count and total cost |
+| `GetWishList` | `db *sql.DB, listID int` | `*models.WishList, error` | One group with members |
+| `RenameWishList` | `db *sql.DB, listID int, name string` | `error` | Renames a group |
+| `IsWishListMember` | `db *sql.DB, listID, userID int` | `bool, error` | Membership check |
+| `AddWishListMember` | `db *sql.DB, listID, userID int` | `error` | Adds a member; `ErrAlreadyMember` if already in |
+| `RemoveWishListMember` | `db *sql.DB, listID, userID int` | `bool, error` | Removes a member; deletes the group (and its wishes) when the last member leaves and returns `true` |
+| `GetWishListItems` | `db *sql.DB, listID int` | `[]models.WishItem, error` | Wishes in a group with `AddedBy`, newest first |
+| `CreateWishListItem` | `db *sql.DB, listID, userID int, name, why, link string, cost *float64` | `*models.WishItem, error` | Adds a wish to a group |
+| `UpdateWishListItem` | `db *sql.DB, listID, itemID int, name, why, link string, cost *float64` | `*models.WishItem, error` | Edits a wish in a group |
+| `DeleteWishListItem` | `db *sql.DB, listID, itemID int` | `error` | Deletes a wish from a group |
 
 ---
 

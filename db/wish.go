@@ -33,7 +33,7 @@ func GetWishItems(d *sql.DB, userID int) ([]models.WishItem, error) {
 		rows, err := d.Query(
 			`SELECT `+wishColumns+`
 			 FROM wish_items
-			 WHERE user_id = $1
+			 WHERE user_id = $1 AND list_id IS NULL
 			 ORDER BY created_at DESC`,
 			userID,
 		)
@@ -59,7 +59,7 @@ func UpdateWishItem(d *sql.DB, itemID, userID int, name, why, link string, cost 
 	var item models.WishItem
 	err := scanWishItem(d.QueryRow(
 		`UPDATE wish_items SET name = $1, why = $2, link = $3, cost = $4
-		 WHERE id = $5 AND user_id = $6
+		 WHERE id = $5 AND user_id = $6 AND list_id IS NULL
 		 RETURNING `+wishColumns,
 		name, why, link, cost, itemID, userID,
 	), &item)
@@ -75,7 +75,7 @@ func UpdateWishItem(d *sql.DB, itemID, userID int, name, why, link string, cost 
 // DeleteWishItem removes a wishlist item (only if owned by the user)
 func DeleteWishItem(d *sql.DB, itemID, userID int) error {
 	result, err := d.Exec(
-		`DELETE FROM wish_items WHERE id = $1 AND user_id = $2`,
+		`DELETE FROM wish_items WHERE id = $1 AND user_id = $2 AND list_id IS NULL`,
 		itemID, userID,
 	)
 	if err != nil {
