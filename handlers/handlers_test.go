@@ -874,3 +874,17 @@ func TestCreateStashExpense_CategoryTooLong(t *testing.T) {
 		t.Errorf("expected 400 for category >50 chars, got %d", w.Code)
 	}
 }
+
+func TestNormalizeEmail(t *testing.T) {
+	cases := map[string]string{
+		"alice@x.com":      "alice@x.com",
+		"ALICE@X.COM":      "alice@x.com",
+		"  Alice@X.com \n": "alice@x.com",
+		"":                 "",
+	}
+	for in, want := range cases {
+		if got := normalizeEmail(in); got != want {
+			t.Errorf("normalizeEmail(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

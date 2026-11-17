@@ -30,6 +30,7 @@ This folder contains all database operations for GopherDebt. Each file handles C
 | `access_control.go` | Email whitelist/blacklist management |
 | `retry.go` | Generic retry with backoff for transient DB errors |
 | `migrations.go` | Database schema creation and updates |
+| `security.go` | Locks Supabase's REST API out of the app tables; case-insensitive unique emails |
 
 ---
 
@@ -47,7 +48,7 @@ This folder contains all database operations for GopherDebt. Each file handles C
 | Function | Parameters | Returns | Description |
 |----------|------------|---------|-------------|
 | `CreateUser` | `db *sql.DB, email, passwordHash, name string` | `*models.User, error` | Creates a new user with default theme 'dark' |
-| `GetUserByEmail` | `db *sql.DB, email string` | `*models.User, error` | Finds user by email (used for login) |
+| `GetUserByEmail` | `db *sql.DB, email string` | `*models.User, error` | Finds user by email, ignoring letter case (oldest account wins if case variants exist); used for login and the register duplicate check |
 | `GetUserByID` | `db *sql.DB, id int` | `*models.User, error` | Finds user by their ID |
 | `GetAllUsers` | `db *sql.DB` | `[]models.User, error` | Returns all users (for member selection) |
 | `UpdateUserTheme` | `db *sql.DB, userID int, theme string` | `error` | Updates user's theme preference |
@@ -158,7 +159,7 @@ For each expense_payment:
 
 | Function | Parameters | Returns | Description |
 |----------|------------|---------|-------------|
-| `RunMigrations` | `db *sql.DB` | `error` | Creates all tables and indexes if they don't exist |
+| `RunMigrations` | `db *sql.DB` | `error` | Creates all tables and indexes if they don't exist, then runs `lockDownPublicAPI` and `ensureUniqueEmailIgnoringCase` |
 
 ### Tables Created
 
@@ -293,6 +294,21 @@ All personal functions only touch wishes with `list_id IS NULL`.
 | `AddToBlacklist` | `db *sql.DB, email, reason string, addedBy int` | `*BlacklistEntry, error` | Adds email to blacklist |
 | `RemoveFromWhitelist` | `db *sql.DB, id int` | `error` | Removes entry from whitelist |
 | `RemoveFromBlacklist` | `db *sql.DB, id int` | `error` | Removes entry from blacklist |
+
+---
+
+## 🔧 security.go
+
+Runs at the end of `RunMigrations` on every boot.
+
+| Function | Description |
+|----------|-------------|
+| `lockDownPublicAPI` | Closes Supabase's auto-generated REST API (PostgREST, roles `anon` / `authenticated`) over the app tables: drops the old always-true RLS policies and revokes those roles' table and sequence grants. RLS stays enabled with **no policies**, so those roles see nothing even if a grant comes back. |
+| `ensureUniqueEmailIgnoringCase` | Creates a unique index on `LOWER(email)` so case variants of an email can't both register. If such duplicates already exist, it logs a warning and skips the index instead of failing boot. |
+
+**Why the app still has access:** the app's role owns the tables, and owners bypass RLS unless it is forced. (Every boot already runs `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`, which only the owner can do.) `lockDownPublicAPI` checks this first: if the role doesn't own every app table, a table has `FORCE ROW LEVEL SECURITY`, and the role has no `BYPASSRLS`, it changes nothing and logs `WARNING: public API lockdown skipped ...`. Only existing policies and grants are touched, so after the first run it does no DDL.
+
+**Do not add `USING (true)` policies.** A policy without a `TO` clause applies to every role, including `anon`, and would reopen the REST API.
 
 ---
 

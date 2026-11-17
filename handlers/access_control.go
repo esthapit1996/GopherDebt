@@ -88,6 +88,7 @@ func (h *AccessControlHandler) AddToWhitelist(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 		return
 	}
+	req.Email = normalizeEmail(req.Email)
 
 	entry, err := db.AddToWhitelist(h.DB, req.Email, requesterID)
 	if err != nil {
@@ -116,6 +117,7 @@ func (h *AccessControlHandler) AddToBlacklist(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 		return
 	}
+	req.Email = normalizeEmail(req.Email)
 
 	// Cannot blacklist the founder
 	if req.Email == db.FounderEmail {

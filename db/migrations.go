@@ -173,39 +173,25 @@ func RunMigrations(db *sql.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_stash_expenses_user_id ON stash_expenses(user_id)`,
-		// Enable RLS on all public tables so they are not exposed via PostgREST without a policy.
-		// The app connects as a single role and enforces access control at the query level,
-		// so policies use USING (true) to allow the app role through unconditionally.
+		// Enable RLS on all public tables so Supabase's REST API (PostgREST, roles anon/authenticated)
+		// sees no rows. There are deliberately no policies: the app's role owns the tables and so
+		// bypasses RLS, and enforces access control in its queries. See lockDownPublicAPI.
 		`ALTER TABLE users ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY users_app_access ON users USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE groups ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY groups_app_access ON groups USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE group_members ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY group_members_app_access ON group_members USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE expenses ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY expenses_app_access ON expenses USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE expense_splits ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY expense_splits_app_access ON expense_splits USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE settlements ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY settlements_app_access ON settlements USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE expense_payments ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY expense_payments_app_access ON expense_payments USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY activity_log_app_access ON activity_log USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE suggestions ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY suggestions_app_access ON suggestions USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE suggestion_votes ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY suggestion_votes_app_access ON suggestion_votes USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE suggestion_comments ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY suggestion_comments_app_access ON suggestion_comments USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE email_whitelist ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY email_whitelist_app_access ON email_whitelist USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE email_blacklist ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY email_blacklist_app_access ON email_blacklist USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		// Add is_paid column to expenses table
 		`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE`,
 		`ALTER TABLE stash_expenses ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY stash_expenses_app_access ON stash_expenses USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		// GoWish: personal wishlist
 		`CREATE TABLE IF NOT EXISTS wish_items (
 			id SERIAL PRIMARY KEY,
@@ -217,7 +203,6 @@ func RunMigrations(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_wish_items_user_id ON wish_items(user_id)`,
 		`ALTER TABLE wish_items ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY wish_items_app_access ON wish_items USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		// GoWish: optional "why" note and optional cost. Name/why length caps (64/128) are enforced by the API.
 		`ALTER TABLE wish_items ADD COLUMN IF NOT EXISTS why VARCHAR(128) DEFAULT ''`,
 		`ALTER TABLE wish_items ALTER COLUMN cost DROP NOT NULL`,
@@ -239,9 +224,7 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE wish_items ADD COLUMN IF NOT EXISTS list_id INTEGER REFERENCES wish_lists(id) ON DELETE CASCADE`,
 		`CREATE INDEX IF NOT EXISTS idx_wish_items_list_id ON wish_items(list_id)`,
 		`ALTER TABLE wish_lists ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY wish_lists_app_access ON wish_lists USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE wish_list_members ENABLE ROW LEVEL SECURITY`,
-		`DO $$ BEGIN CREATE POLICY wish_list_members_app_access ON wish_list_members USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		// GoWish shared lists: description + icon, like debt groups
 		`ALTER TABLE wish_lists ADD COLUMN IF NOT EXISTS description VARCHAR(128) DEFAULT ''`,
 		`ALTER TABLE wish_lists ADD COLUMN IF NOT EXISTS emoji VARCHAR(10) DEFAULT '👥'`,
@@ -252,6 +235,13 @@ func RunMigrations(db *sql.DB) error {
 		if err != nil {
 			return fmt.Errorf("migration %d failed: %w", i+1, err)
 		}
+	}
+
+	if err := lockDownPublicAPI(db); err != nil {
+		return fmt.Errorf("public API lockdown failed: %w", err)
+	}
+	if err := ensureUniqueEmailIgnoringCase(db); err != nil {
+		return fmt.Errorf("case-insensitive email index failed: %w", err)
 	}
 
 	fmt.Println("All migrations completed successfully!")

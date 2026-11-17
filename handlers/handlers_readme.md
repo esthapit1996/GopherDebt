@@ -58,8 +58,8 @@ type UserHandler struct {
 
 | Method | Endpoint | Function | Description |
 |--------|----------|----------|-------------|
-| POST | `/api/register` | `Register` | Creates new user (checks whitelist, hashes password) |
-| POST | `/api/login` | `Login` | Validates credentials, returns JWT token |
+| POST | `/api/register` | `Register` | Creates new user (email trimmed + lowercased; checks blacklist, whitelist and case-insensitive duplicates; hashes password) |
+| POST | `/api/login` | `Login` | Validates credentials (email matched ignoring case), returns JWT token |
 | GET | `/api/me` | `GetProfile` | Returns current user's profile |
 | GET | `/api/users` | `GetAllUsers` | Returns all users (for member selection) |
 | PUT | `/api/me/theme` | `UpdateTheme` | Updates user's theme preference |
