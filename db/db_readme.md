@@ -258,10 +258,10 @@ All personal functions only touch wishes with `list_id IS NULL`.
 
 | Function | Parameters | Returns | Description |
 |----------|------------|---------|-------------|
-| `CreateWishList` | `db *sql.DB, userID int, name string` | `*models.WishList, error` | Creates a group with the creator as first member (transaction) |
+| `CreateWishList` | `db *sql.DB, userID int, name, description, emoji string, memberIDs []int` | `*models.WishList, error` | Creates a group with the creator as first member plus `memberIDs` (unknown IDs skipped) in one transaction; blank emoji defaults to 👥 |
 | `GetUserWishLists` | `db *sql.DB, userID int` | `[]models.WishList, error` | Groups the user belongs to, newest first, with members, item count and total cost |
 | `GetWishList` | `db *sql.DB, listID int` | `*models.WishList, error` | One group with members |
-| `RenameWishList` | `db *sql.DB, listID int, name string` | `error` | Renames a group |
+| `UpdateWishList` | `db *sql.DB, listID int, name, description, emoji string` | `error` | Edits a group's name, description and icon (blank emoji = 👥) |
 | `IsWishListMember` | `db *sql.DB, listID, userID int` | `bool, error` | Membership check |
 | `AddWishListMember` | `db *sql.DB, listID, userID int` | `error` | Adds a member; `ErrAlreadyMember` if already in |
 | `RemoveWishListMember` | `db *sql.DB, listID, userID int` | `bool, error` | Removes a member and their wishes in the group; deletes the group when the last member leaves and returns `true` |

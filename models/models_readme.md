@@ -213,11 +213,21 @@ Used for both creating and updating a GoWish item.
 
 ### WishListRequest
 
-Used for creating and renaming a shared wish group.
+Used for editing a shared wish group. Same options as a debt group.
 
 | Field | Type | Validation | Description |
 |-------|------|------------|-------------|
 | `Name` | `string` | `required,max=64` | Group name (trimmed, must not be blank) |
+| `Description` | `string` | `max=128` | Optional description |
+| `Emoji` | `string` | `max=10` | Group icon; blank defaults to 👥 |
+
+### CreateWishListRequest
+
+`WishListRequest` plus the initial members.
+
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `MemberIDs` | `[]int` | `max=50,dive,gt=0` | Users to add besides the creator; unknown IDs are skipped |
 
 ### WishListMemberRequest
 
@@ -301,6 +311,8 @@ Public view of a user in a shared wish group (no email).
 |-------|------|----------|-------------|
 | `ID` | `int` | `id` | Primary key |
 | `Name` | `string` | `name` | Group name |
+| `Description` | `string` | `description` | Optional description |
+| `Emoji` | `string` | `emoji` | Group icon (default 👥) |
 | `CreatedAt` | `time.Time` | `created_at` | When the group was created |
 | `Members` | `[]WishMember` | `members` | Members, in join order |
 | `ItemCount` | `int` | `item_count` | Number of wishes |

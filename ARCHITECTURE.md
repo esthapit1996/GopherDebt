@@ -213,10 +213,11 @@ Starts listening for HTTP requests.
 ├──────────────────┤   ├──────────────────┤   ├───────────────────┤
 │ id (PK)          │   │ id (PK)          │   │ id (PK)           │
 │ user_id (FK)     │   │ name             │   │ list_id (FK)      │
-│ list_id (FK)     │   │ created_by (FK)  │   │ user_id (FK)      │
-│ name             │   │ created_at       │   │ joined_at         │
-│ why              │   └──────────────────┘   └───────────────────┘
-│ link             │
+│ list_id (FK)     │   │ description      │   │ user_id (FK)      │
+│ name             │   │ emoji            │   │ joined_at         │
+│ why              │   │ created_by (FK)  │   └───────────────────┘
+│ link             │   │ created_at       │
+│                  │   └──────────────────┘
 │ cost (nullable)  │   wish_items.list_id NULL = personal wish (owned by user_id);
 │ created_at       │   set = shared wish (user_id = who added it)
 └──────────────────┘

@@ -227,7 +227,7 @@ func main() {
 		api.GET("/wish-lists", wishListHandler.GetWishLists)
 		api.POST("/wish-lists", wishListHandler.CreateWishList)
 		api.GET("/wish-lists/:id", wishListHandler.GetWishList)
-		api.PUT("/wish-lists/:id", wishListHandler.RenameWishList)
+		api.PUT("/wish-lists/:id", wishListHandler.UpdateWishList)
 		api.POST("/wish-lists/:id/members", wishListHandler.AddMember)
 		api.DELETE("/wish-lists/:id/members/:userId", wishListHandler.RemoveMember)
 		api.GET("/wish-lists/:id/items", wishListHandler.GetItems)
