@@ -94,9 +94,11 @@ This folder contains all database operations for GopherDebt. Each file handles C
 | `CreateSettlement` | `db, groupID, paidBy, paidTo int, amount float64` | `*models.Settlement, error` | Records a direct payment between users |
 | `GetGroupSettlements` | `db *sql.DB, groupID int` | `[]models.Settlement, error` | Lists all settlements in a group |
 | `CalculateGroupBalances` | `db *sql.DB, groupID int` | `[]models.Balance, error` | **The brain!** Calculates who owes whom |
-| `CalculateUserBalance` | `db *sql.DB, groupID, userID int` | `float64, error` | Gets single user's balance in a group |
-| `GetDebtOverview` | `db *sql.DB, userID int` | `[]models.UserBalance, error` | Shows user's debts across all groups |
-| `GetUserPaymentHistory` | `db *sql.DB, userID int, limit int` | `[]PaymentHistoryItem, error` | Gets all payments made/received by user |
+| `GetUserBalanceInGroup` | `db *sql.DB, groupID, userID int` | `float64, error` | Gets single user's balance in a group |
+| `GetDebtOverview` | `db *sql.DB, userID int` | `[]DebtOverviewItem, error` | Shows user's net debts across all groups |
+| `GetDebtDetails` | `db *sql.DB, userID, otherUserID int` | `[]DebtDetailItem, error` | Breakdown of debts between two users |
+| `GetPaymentHistory` | `db *sql.DB, userID int` | `[]PaymentHistoryItem, error` | Payments made/received by the user, after their `history_cleared_at` |
+| `ClearPaymentHistory` | `db *sql.DB, userID int` | `error` | Sets `users.history_cleared_at` to now. Hides history for that user only; never deletes settlements or payments |
 
 ### Balance Calculation Logic
 ```

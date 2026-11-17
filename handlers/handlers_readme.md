@@ -113,12 +113,20 @@ type UserHandler struct {
 
 | Method | Endpoint | Function | Description |
 |--------|----------|----------|-------------|
-| POST | `/api/groups/:id/settle` | `CreateSettlement` | Records direct payment between users |
-| GET | `/api/groups/:id/settlements` | `GetSettlements` | Lists all settlements in group |
-| GET | `/api/groups/:id/balances` | `GetBalances` | **Key!** Who owes whom in the group |
+| POST | `/api/groups/:id/settlements` | `CreateSettlement` | Records direct payment between users |
+| GET | `/api/groups/:id/settlements` | `GetGroupSettlements` | Lists all settlements in group |
+| DELETE | `/api/groups/:id/settlements/:settlementID` | `DeleteSettlement` | Deletes a settlement in this group |
+| GET | `/api/groups/:id/balances` | `GetGroupBalances` | **Key!** Who owes whom in the group |
 | GET | `/api/groups/:id/my-balance` | `GetMyBalance` | Current user's balance in group |
-| GET | `/api/me/debt-overview` | `GetDebtOverview` | User's debts across ALL groups |
-| GET | `/api/me/payment-history` | `GetPaymentHistory` | User's payment history |
+
+Debt overview and payment history live on `UserHandler` (users.go):
+
+| Method | Endpoint | Function | Description |
+|--------|----------|----------|-------------|
+| GET | `/api/debt-overview` | `GetDebtOverview` | User's net debts across ALL groups |
+| GET | `/api/debt-overview/:userId` | `GetDebtDetails` | Breakdown of debts with one user |
+| GET | `/api/payment-history` | `GetPaymentHistory` | User's payment history (entries after their last clear) |
+| DELETE | `/api/payment-history` | `ClearPaymentHistory` | Hides the user's history up to now, for that user only; deletes nothing, so balances and the other party's history are unchanged |
 
 ---
 
