@@ -47,6 +47,7 @@ func bindWishItem(c *gin.Context) (*models.WishItemRequest, bool) {
 	}
 
 	req.Name = strings.TrimSpace(req.Name)
+	req.Why = strings.TrimSpace(req.Why)
 	req.Link = strings.TrimSpace(req.Link)
 	if req.Name == "" {
 		c.JSON(http.StatusBadRequest, models.APIResponse{
@@ -98,7 +99,7 @@ func (h *WishHandler) CreateWishItem(c *gin.Context) {
 		return
 	}
 
-	item, err := db.CreateWishItem(h.DB, userID, req.Name, req.Link, req.Cost)
+	item, err := db.CreateWishItem(h.DB, userID, req.Name, req.Why, req.Link, req.Cost)
 	if err != nil {
 		log.Printf("ERROR CreateWishItem: user %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{
@@ -131,7 +132,7 @@ func (h *WishHandler) UpdateWishItem(c *gin.Context) {
 		return
 	}
 
-	item, err := db.UpdateWishItem(h.DB, itemID, userID, req.Name, req.Link, req.Cost)
+	item, err := db.UpdateWishItem(h.DB, itemID, userID, req.Name, req.Why, req.Link, req.Cost)
 	if err != nil {
 		if err == db.ErrNotFound {
 			c.JSON(http.StatusNotFound, models.APIResponse{

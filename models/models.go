@@ -217,16 +217,19 @@ type WishItem struct {
 	ID        int       `json:"id"`
 	UserID    int       `json:"user_id"`
 	Name      string    `json:"name"`
+	Why       string    `json:"why"`
 	Link      string    `json:"link"`
-	Cost      float64   `json:"cost"`
+	Cost      *float64  `json:"cost"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// WishItemRequest is the payload for adding or updating a GoWish item
+// WishItemRequest is the payload for adding or updating a GoWish item.
+// Cost is optional: nil means no price set.
 type WishItemRequest struct {
-	Name string  `json:"name" binding:"required,max=255"`
-	Link string  `json:"link" binding:"max=2048"`
-	Cost float64 `json:"cost" binding:"required,gt=0"`
+	Name string   `json:"name" binding:"required,max=64"`
+	Why  string   `json:"why" binding:"max=128"`
+	Link string   `json:"link" binding:"max=2048"`
+	Cost *float64 `json:"cost" binding:"omitempty,gt=0"`
 }
 
 // APIResponse is a standard API response wrapper

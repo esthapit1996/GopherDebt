@@ -285,8 +285,9 @@ type WishHandler struct {
 
 ### Validation
 
-- `name` is trimmed and required (max 255)
-- `cost` must be > 0
+- `name` is trimmed and required (max 64 characters)
+- `why` is trimmed and optional (max 128 characters)
+- `cost` is optional (`null` = no price); when set it must be > 0
 - `link` is optional; if set it must be an absolute `http`/`https` URL (max 2048). Other schemes such as `javascript:` are rejected because the frontend renders the link as an `href`.
 
 ---
