@@ -185,8 +185,8 @@ func AddWishListMember(d *sql.DB, listID, userID int) error {
 	return nil
 }
 
-// RemoveWishListMember removes a user from the shared list. When the last member
-// leaves, the list and its items are deleted; listDeleted reports whether that happened.
+// RemoveWishListMember removes a user and their wishes from the shared list. When the
+// last member leaves, the list is deleted too; listDeleted reports whether that happened.
 func RemoveWishListMember(d *sql.DB, listID, userID int) (listDeleted bool, err error) {
 	tx, err := d.Begin()
 	if err != nil {
@@ -217,6 +217,14 @@ func RemoveWishListMember(d *sql.DB, listID, userID int) (listDeleted bool, err 
 	}
 	if rows == 0 {
 		return false, ErrNotFound
+	}
+
+	// Each member has their own section in the list; it goes with them
+	if _, err := tx.Exec(
+		`DELETE FROM wish_items WHERE list_id = $1 AND user_id = $2`,
+		listID, userID,
+	); err != nil {
+		return false, err
 	}
 
 	result, err = tx.Exec(

@@ -308,7 +308,7 @@ Shared GoWish groups, separate from debt groups. Every member has full access: r
 | GET | `/api/wish-lists/:id` | `GetWishList` | Group with members |
 | PUT | `/api/wish-lists/:id` | `RenameWishList` | Rename |
 | POST | `/api/wish-lists/:id/members` | `AddMember` | Add a user (`409` if already a member) |
-| DELETE | `/api/wish-lists/:id/members/:userId` | `RemoveMember` | Remove a member or leave; returns `list_deleted` |
+| DELETE | `/api/wish-lists/:id/members/:userId` | `RemoveMember` | Remove a member or leave (their wishes in the group are deleted); returns `list_deleted` |
 | GET | `/api/wish-lists/:id/items` | `GetItems` | Wishes, each with `added_by` |
 | POST | `/api/wish-lists/:id/items` | `CreateItem` | Add a wish (validated like `/api/wish`) |
 | PUT | `/api/wish-lists/:id/items/:itemId` | `UpdateItem` | Edit any wish in the group |
@@ -318,7 +318,8 @@ Shared GoWish groups, separate from debt groups. Every member has full access: r
 
 - Every route checks membership first (`memberListID`). Non-members get `404`, so group IDs can't be probed.
 - Item queries filter on both item ID and `list_id`, so an item from another group can't be edited by guessing its ID.
-- When the last member leaves, the group and its wishes are deleted (in one transaction with a row lock, so two members leaving at once can't leave an orphan group).
+- Each wish belongs to the member who added it (`user_id`), which is their section in the group. Edits by other members don't change the owner.
+- When a member leaves or is removed, their wishes in that group are deleted. When the last member leaves, the group is deleted too (in one transaction with a row lock, so two members leaving at once can't leave an orphan group).
 
 ---
 

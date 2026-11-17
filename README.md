@@ -168,7 +168,7 @@ go build -o gopherdebt .
 
 ### GoWish — Shared Wish Groups (Protected, members only)
 
-Separate from debt groups. Every member can rename the group, add/remove members and add/edit/delete wishes. When the last member leaves, the group and its wishes are deleted. Non-members get `404`.
+Separate from debt groups. Each member has their own section of wishes in the group (the wishes they added). Every member can rename the group, add/remove members, and edit/delete any wish. When a member leaves or is removed, their wishes in that group are deleted; when the last member leaves, the group is deleted. Non-members get `404`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -177,7 +177,7 @@ Separate from debt groups. Every member can rename the group, add/remove members
 | GET | `/api/wish-lists/:id` | Get a group with its members |
 | PUT | `/api/wish-lists/:id` | Rename a group |
 | POST | `/api/wish-lists/:id/members` | Add a member (`{"user_id"}`) |
-| DELETE | `/api/wish-lists/:id/members/:userId` | Remove a member, or leave (own ID); returns `{"list_deleted"}` |
+| DELETE | `/api/wish-lists/:id/members/:userId` | Remove a member (and their wishes in the group), or leave (own ID); returns `{"list_deleted"}` |
 | GET | `/api/wish-lists/:id/items` | Wishes in the group (each with `added_by`) |
 | POST | `/api/wish-lists/:id/items` | Add a wish (same body as `/api/wish`) |
 | PUT | `/api/wish-lists/:id/items/:itemId` | Edit a wish |
