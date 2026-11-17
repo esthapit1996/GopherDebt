@@ -22,11 +22,13 @@ func CreateUser(db *sql.DB, email, passwordHash, name string) (*models.User, err
 	return &user, nil
 }
 
+// GetUserByEmail finds a user ignoring letter case (oldest account wins if case variants exist)
 func GetUserByEmail(d *sql.DB, email string) (*models.User, error) {
 	return retry("GetUserByEmail", func() (*models.User, error) {
 		var user models.User
 		err := d.QueryRow(
-			`SELECT id, email, password_hash, name, COALESCE(avatar, ''), COALESCE(theme_preference, 'darkknight'), COALESCE(language, 'en'), created_at, updated_at FROM users WHERE email = $1`,
+			`SELECT id, email, password_hash, name, COALESCE(avatar, ''), COALESCE(theme_preference, 'darkknight'), COALESCE(language, 'en'), created_at, updated_at FROM users
+			 WHERE LOWER(email) = LOWER($1) ORDER BY id LIMIT 1`,
 			email,
 		).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.Avatar, &user.ThemePreference, &user.Language, &user.CreatedAt, &user.UpdatedAt)
 		if err == sql.ErrNoRows {

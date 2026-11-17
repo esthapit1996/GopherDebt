@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,12 +26,18 @@ func NewUserHandler(database *sql.DB) *UserHandler {
 	return &UserHandler{DB: database}
 }
 
+// normalizeEmail makes emails case-insensitive so "Alice@x.com" can't register next to "alice@x.com"
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 func (h *UserHandler) Register(c *gin.Context) {
 	var req models.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 		return
 	}
+	req.Email = normalizeEmail(req.Email)
 
 	// Check if email is blacklisted first
 	blacklisted, err := db.IsEmailBlacklisted(h.DB, req.Email)
@@ -85,6 +92,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Error: err.Error()})
 		return
 	}
+	req.Email = normalizeEmail(req.Email)
 
 	user, err := db.GetUserByEmail(h.DB, req.Email)
 	if err != nil {

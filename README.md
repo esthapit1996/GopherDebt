@@ -320,6 +320,7 @@ image: <receipt image file>
 ├── fly.toml               # Fly.io deployment config
 ├── db/
 │   ├── migrations.go      # Database schema & migrations
+│   ├── security.go        # Supabase REST API lockdown + case-insensitive unique emails
 │   ├── users.go           # User CRUD
 │   ├── groups.go          # Group CRUD
 │   ├── expenses.go        # Expense CRUD

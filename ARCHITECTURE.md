@@ -42,7 +42,8 @@ GopherDebt/
 │   ├── wish_lists.go    # GoWish shared wish groups
 │   ├── access_control.go # Email whitelist/blacklist
 │   ├── retry.go         # Generic retry with backoff
-│   └── migrations.go    # Schema creation
+│   ├── migrations.go    # Schema creation
+│   └── security.go      # Supabase REST API lockdown, unique emails
 ├── handlers/            # HTTP endpoint controllers
 │   ├── handlers_readme.md   # 📖 Documentation
 │   ├── handlers_test.go # Handler tests (+ stash_test.go, wish_test.go, wish_lists_test.go)
