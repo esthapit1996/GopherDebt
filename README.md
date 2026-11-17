@@ -144,7 +144,8 @@ go build -o gopherdebt .
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/receipt/scan` | Upload receipt image → AI extracts items & total |
+| POST | `/api/receipt/scan` | Upload receipt image (max 14 MB) → AI extracts items & total |
+| GET | `/api/receipt/config` | Whether AI scanning is available (`GEMINI_API_KEY` set) |
 
 ### GopherStash — Personal Expense Tracker (Protected)
 
@@ -311,6 +312,7 @@ Content-Type: multipart/form-data
 
 image: <receipt image file>
 ```
+Max 14 MB (413 if larger), so the base64 request stays under Gemini's 20 MB inline-request limit. The file must be an image (415 otherwise). At most 2 scans run at once (429 if busy).
 
 ## Project Structure
 
@@ -350,7 +352,8 @@ image: <receipt image file>
 │   ├── handlers_test.go   # Handler tests
 │   ├── stash_test.go      # GopherStash tests
 │   ├── wish_test.go       # GoWish tests
-│   └── wish_lists_test.go # GoWish shared group tests
+│   ├── wish_lists_test.go # GoWish shared group tests
+│   └── receipt_test.go    # Receipt scan limits + Gemini request (fake server)
 ├── middleware/
 │   ├── auth.go            # JWT authentication
 │   ├── rate_limit.go      # Per-IP rate limiting
