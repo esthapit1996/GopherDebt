@@ -228,6 +228,8 @@ func RunMigrations(db *sql.DB) error {
 		// GoWish shared lists: description + icon, like debt groups
 		`ALTER TABLE wish_lists ADD COLUMN IF NOT EXISTS description VARCHAR(128) DEFAULT ''`,
 		`ALTER TABLE wish_lists ADD COLUMN IF NOT EXISTS emoji VARCHAR(10) DEFAULT '👥'`,
+		// Payment history "clear" only hides entries up to this time for that user; nothing is deleted
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS history_cleared_at TIMESTAMP`,
 	}
 
 	for i, migration := range migrations {

@@ -520,7 +520,7 @@ type PaymentHistoryItem struct {
 	CreatedAt   string       `json:"created_at"`
 }
 
-// GetPaymentHistory returns all settlements and expense payments for a user
+// GetPaymentHistory returns the user's settlements and expense payments made after their last clear
 func GetPaymentHistory(d *sql.DB, userID int) ([]PaymentHistoryItem, error) {
 	return retry("GetPaymentHistory", func() ([]PaymentHistoryItem, error) {
 		var history []PaymentHistoryItem
@@ -534,7 +534,8 @@ func GetPaymentHistory(d *sql.DB, userID int) ([]PaymentHistoryItem, error) {
 			JOIN groups g ON s.group_id = g.id
 			JOIN users u_payer ON s.paid_by = u_payer.id
 			JOIN users u_receiver ON s.paid_to = u_receiver.id
-			WHERE s.paid_by = $1 OR s.paid_to = $1
+			WHERE (s.paid_by = $1 OR s.paid_to = $1)
+			  AND s.created_at > COALESCE((SELECT history_cleared_at FROM users WHERE id = $1), '-infinity')
 			ORDER BY s.created_at DESC`,
 			userID,
 		)
@@ -587,7 +588,8 @@ func GetPaymentHistory(d *sql.DB, userID int) ([]PaymentHistoryItem, error) {
 			JOIN groups g ON e.group_id = g.id
 			JOIN users u_payer ON ep.paid_by = u_payer.id
 			JOIN users u_owner ON e.paid_by = u_owner.id
-			WHERE ep.paid_by = $1 OR e.paid_by = $1
+			WHERE (ep.paid_by = $1 OR e.paid_by = $1)
+			  AND ep.created_at > COALESCE((SELECT history_cleared_at FROM users WHERE id = $1), '-infinity')
 			ORDER BY ep.created_at DESC`,
 			userID,
 		)
@@ -647,19 +649,20 @@ func GetPaymentHistory(d *sql.DB, userID int) ([]PaymentHistoryItem, error) {
 	})
 }
 
-// ClearPaymentHistory deletes all settlements and expense payments for a user
+// ClearPaymentHistory hides the user's payment history up to now, for that user only.
+// Settlements and expense payments are never deleted: balances are computed from them,
+// and the other party still sees them in their own history.
 func ClearPaymentHistory(db *sql.DB, userID int) error {
-	// Delete settlements where user is payer or receiver
-	_, err := db.Exec(`DELETE FROM settlements WHERE paid_by = $1 OR paid_to = $1`, userID)
+	result, err := db.Exec(`UPDATE users SET history_cleared_at = CURRENT_TIMESTAMP WHERE id = $1`, userID)
 	if err != nil {
 		return err
 	}
-
-	// Delete expense payments where user is the payer
-	_, err = db.Exec(`DELETE FROM expense_payments WHERE paid_by = $1`, userID)
+	rows, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
-
+	if rows == 0 {
+		return ErrNotFound
+	}
 	return nil
 }
