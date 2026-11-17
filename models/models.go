@@ -221,6 +221,36 @@ type WishItem struct {
 	Link      string    `json:"link"`
 	Cost      *float64  `json:"cost"`
 	CreatedAt time.Time `json:"created_at"`
+	// Set only for items in a shared wish list
+	ListID  *int        `json:"list_id,omitempty"`
+	AddedBy *WishMember `json:"added_by,omitempty"`
+}
+
+// WishMember is the public view of a user in a shared wish list (no email)
+type WishMember struct {
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	Avatar string `json:"avatar"`
+}
+
+// WishList is a shared GoWish list; every member can manage its items and members
+type WishList struct {
+	ID        int          `json:"id"`
+	Name      string       `json:"name"`
+	CreatedAt time.Time    `json:"created_at"`
+	Members   []WishMember `json:"members"`
+	ItemCount int          `json:"item_count"`
+	TotalCost float64      `json:"total_cost"`
+}
+
+// WishListRequest is the payload for creating or renaming a shared wish list
+type WishListRequest struct {
+	Name string `json:"name" binding:"required,max=64"`
+}
+
+// WishListMemberRequest is the payload for adding a member to a shared wish list
+type WishListMemberRequest struct {
+	UserID int `json:"user_id" binding:"required,gt=0"`
 }
 
 // WishItemRequest is the payload for adding or updating a GoWish item.

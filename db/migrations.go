@@ -221,6 +221,27 @@ func RunMigrations(db *sql.DB) error {
 		// GoWish: optional "why" note and optional cost. Name/why length caps (64/128) are enforced by the API.
 		`ALTER TABLE wish_items ADD COLUMN IF NOT EXISTS why VARCHAR(128) DEFAULT ''`,
 		`ALTER TABLE wish_items ALTER COLUMN cost DROP NOT NULL`,
+		// GoWish shared lists: separate from debt groups. wish_items.list_id NULL = personal wish.
+		`CREATE TABLE IF NOT EXISTS wish_lists (
+			id SERIAL PRIMARY KEY,
+			name VARCHAR(64) NOT NULL,
+			created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS wish_list_members (
+			id SERIAL PRIMARY KEY,
+			list_id INTEGER NOT NULL REFERENCES wish_lists(id) ON DELETE CASCADE,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(list_id, user_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_wish_list_members_user_id ON wish_list_members(user_id)`,
+		`ALTER TABLE wish_items ADD COLUMN IF NOT EXISTS list_id INTEGER REFERENCES wish_lists(id) ON DELETE CASCADE`,
+		`CREATE INDEX IF NOT EXISTS idx_wish_items_list_id ON wish_items(list_id)`,
+		`ALTER TABLE wish_lists ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY wish_lists_app_access ON wish_lists USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		`ALTER TABLE wish_list_members ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY wish_list_members_app_access ON wish_list_members USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 	}
 
 	for i, migration := range migrations {

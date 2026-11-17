@@ -8,7 +8,7 @@ A full-featured expense sharing and personal finance backend built with Go, Gin,
 - **Settlements & Balances** — Track who owes whom, record payments, view debt overview
 - **Expense Payments** — Partial repayments toward specific expenses
 - **GopherStash** — Personal expense tracker with categories and spending summaries
-- **GoWish** — Personal wishlist of things to buy (name, why, link, cost)
+- **GoWish** — Wishlist of things to buy (name, why, link, cost), personal or in shared wish groups (separate from debt groups)
 - **Receipt Scanning** — AI-powered receipt parsing via Google Gemini
 - **Currency Conversion** — Live exchange rates and historical trend data
 - **Suggestion Box** — Feature suggestions with voting, comments, and status tracking
@@ -166,6 +166,23 @@ go build -o gopherdebt .
 | PUT | `/api/wish/:id` | Update a wishlist item |
 | DELETE | `/api/wish/:id` | Delete a wishlist item |
 
+### GoWish — Shared Wish Groups (Protected, members only)
+
+Separate from debt groups. Every member can rename the group, add/remove members and add/edit/delete wishes. When the last member leaves, the group and its wishes are deleted. Non-members get `404`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/wish-lists` | Groups I'm a member of (with members, item count, total cost) |
+| POST | `/api/wish-lists` | Create a group (`{"name"}`, max 64); creator becomes first member |
+| GET | `/api/wish-lists/:id` | Get a group with its members |
+| PUT | `/api/wish-lists/:id` | Rename a group |
+| POST | `/api/wish-lists/:id/members` | Add a member (`{"user_id"}`) |
+| DELETE | `/api/wish-lists/:id/members/:userId` | Remove a member, or leave (own ID); returns `{"list_deleted"}` |
+| GET | `/api/wish-lists/:id/items` | Wishes in the group (each with `added_by`) |
+| POST | `/api/wish-lists/:id/items` | Add a wish (same body as `/api/wish`) |
+| PUT | `/api/wish-lists/:id/items/:itemId` | Edit a wish |
+| DELETE | `/api/wish-lists/:id/items/:itemId` | Delete a wish |
+
 ### Access Control (Protected, Founder Only)
 
 | Method | Endpoint | Description |
@@ -311,7 +328,8 @@ image: <receipt image file>
 │   ├── activity.go        # Activity logging
 │   ├── suggestions.go     # Suggestion box
 │   ├── stash.go           # GopherStash personal expenses
-│   ├── wish.go            # GoWish wishlist
+│   ├── wish.go            # GoWish personal wishlist
+│   ├── wish_lists.go      # GoWish shared wish groups
 │   ├── access_control.go  # Email whitelist/blacklist
 │   └── retry.go           # Generic retry with backoff for transient DB errors
 ├── handlers/
@@ -324,12 +342,14 @@ image: <receipt image file>
 │   ├── suggestions.go     # Suggestion box endpoints
 │   ├── currency.go        # Currency conversion (cached external APIs)
 │   ├── stash.go           # GopherStash endpoints
-│   ├── wish.go            # GoWish endpoints
+│   ├── wish.go            # GoWish personal endpoints
+│   ├── wish_lists.go      # GoWish shared group endpoints
 │   ├── access_control.go  # Whitelist/blacklist (founder only)
 │   ├── receipt.go         # AI receipt scanning via Gemini
 │   ├── handlers_test.go   # Handler tests
 │   ├── stash_test.go      # GopherStash tests
-│   └── wish_test.go       # GoWish tests
+│   ├── wish_test.go       # GoWish tests
+│   └── wish_lists_test.go # GoWish shared group tests
 ├── middleware/
 │   ├── auth.go            # JWT authentication
 │   ├── rate_limit.go      # Per-IP rate limiting
@@ -344,7 +364,7 @@ image: <receipt image file>
 go test ./...
 ```
 
-48 tests covering authentication, group operations, expense validation, GopherStash and GoWish validation, and middleware.
+51 tests covering authentication, group operations, expense validation, GopherStash and GoWish (personal + shared) validation, and middleware.
 
 ## Deployment
 
