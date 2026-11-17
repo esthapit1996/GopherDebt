@@ -30,9 +30,10 @@ Handlers are the **HTTP endpoint controllers**. They receive requests from the f
 | `suggestions.go` | Feature suggestions | `/api/suggestions/*` |
 | `currency.go` | Currency conversion | `/api/currency/*` |
 | `stash.go` | GopherStash personal expenses | `/api/stash/*` |
+| `wish.go` | GoWish personal wishlist | `/api/wish/*` |
 | `access_control.go` | Email whitelist/blacklist | `/api/whitelist/*`, `/api/blacklist/*` |
 | `receipt.go` | AI receipt scanning | `/api/receipt/scan` |
-| `handlers_test.go` | 31 handler tests | — |
+| `handlers_test.go`, `stash_test.go`, `wish_test.go` | Handler tests | — |
 
 ---
 
@@ -250,6 +251,7 @@ type StashHandler struct {
 |--------|----------|----------|-------------|
 | GET | `/api/stash` | `GetStashExpenses` | Get all personal expenses (newest first) |
 | POST | `/api/stash` | `CreateStashExpense` | Add personal expense (description defaults to category name if empty) |
+| PUT | `/api/stash/:id` | `UpdateStashExpense` | Edit a personal expense (owner only) |
 | DELETE | `/api/stash/:id` | `DeleteStashExpense` | Delete a personal expense (owner only) |
 | GET | `/api/stash/summary` | `GetStashSummary` | Total spent + count + breakdown by category |
 | DELETE | `/api/stash` | `ClearStashExpenses` | Clear all personal expenses |
@@ -259,6 +261,33 @@ type StashHandler struct {
 When description is empty:
 - If category is provided → capitalize category name (e.g., `"food"` → `"Food"`)
 - If no category → default to `"Expense"`
+
+---
+
+## 🔧 wish.go
+
+### Handler Struct
+
+```go
+type WishHandler struct {
+    DB *sql.DB
+}
+```
+
+### Endpoints
+
+| Method | Endpoint | Function | Description |
+|--------|----------|----------|-------------|
+| GET | `/api/wish` | `GetWishItems` | Get all wishlist items (newest first) |
+| POST | `/api/wish` | `CreateWishItem` | Add a wishlist item |
+| PUT | `/api/wish/:id` | `UpdateWishItem` | Edit a wishlist item (owner only) |
+| DELETE | `/api/wish/:id` | `DeleteWishItem` | Delete a wishlist item (owner only) |
+
+### Validation
+
+- `name` is trimmed and required (max 255)
+- `cost` must be > 0
+- `link` is optional; if set it must be an absolute `http`/`https` URL (max 2048). Other schemes such as `javascript:` are rejected because the frontend renders the link as an `href`.
 
 ---
 

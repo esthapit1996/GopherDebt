@@ -8,6 +8,7 @@ A full-featured expense sharing and personal finance backend built with Go, Gin,
 - **Settlements & Balances** — Track who owes whom, record payments, view debt overview
 - **Expense Payments** — Partial repayments toward specific expenses
 - **GopherStash** — Personal expense tracker with categories and spending summaries
+- **GoWish** — Personal wishlist of things to buy (name, link, cost)
 - **Receipt Scanning** — AI-powered receipt parsing via Google Gemini
 - **Currency Conversion** — Live exchange rates and historical trend data
 - **Suggestion Box** — Feature suggestions with voting, comments, and status tracking
@@ -151,9 +152,19 @@ go build -o gopherdebt .
 |--------|----------|-------------|
 | GET | `/api/stash` | Get all personal expenses |
 | POST | `/api/stash` | Add a personal expense |
+| PUT | `/api/stash/:id` | Update a personal expense |
 | DELETE | `/api/stash/:id` | Delete a personal expense |
 | GET | `/api/stash/summary` | Get total spent + category breakdown |
 | DELETE | `/api/stash` | Clear all personal expenses |
+
+### GoWish — Personal Wishlist (Protected)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/wish` | Get all wishlist items (newest first) |
+| POST | `/api/wish` | Add a wishlist item |
+| PUT | `/api/wish/:id` | Update a wishlist item |
+| DELETE | `/api/wish/:id` | Delete a wishlist item |
 
 ### Access Control (Protected, Founder Only)
 
@@ -262,6 +273,18 @@ Authorization: Bearer <token>
 }
 ```
 
+### Add Wishlist Item (GoWish)
+```json
+POST /api/wish
+Authorization: Bearer <token>
+{
+  "name": "Mechanical keyboard",
+  "link": "https://example.com/keyboard",
+  "cost": 149.99
+}
+```
+`link` is optional; if set it must be an `http(s)://` URL.
+
 ### Scan Receipt
 ```
 POST /api/receipt/scan
@@ -287,6 +310,7 @@ image: <receipt image file>
 │   ├── activity.go        # Activity logging
 │   ├── suggestions.go     # Suggestion box
 │   ├── stash.go           # GopherStash personal expenses
+│   ├── wish.go            # GoWish wishlist
 │   ├── access_control.go  # Email whitelist/blacklist
 │   └── retry.go           # Generic retry with backoff for transient DB errors
 ├── handlers/
@@ -299,9 +323,12 @@ image: <receipt image file>
 │   ├── suggestions.go     # Suggestion box endpoints
 │   ├── currency.go        # Currency conversion (cached external APIs)
 │   ├── stash.go           # GopherStash endpoints
+│   ├── wish.go            # GoWish endpoints
 │   ├── access_control.go  # Whitelist/blacklist (founder only)
 │   ├── receipt.go         # AI receipt scanning via Gemini
-│   └── handlers_test.go   # 31 handler tests
+│   ├── handlers_test.go   # Handler tests
+│   ├── stash_test.go      # GopherStash tests
+│   └── wish_test.go       # GoWish tests
 ├── middleware/
 │   ├── auth.go            # JWT authentication
 │   ├── rate_limit.go      # Per-IP rate limiting
@@ -316,7 +343,7 @@ image: <receipt image file>
 go test ./...
 ```
 
-31 tests covering authentication, group operations, expense validation, GopherStash validation, and middleware.
+48 tests covering authentication, group operations, expense validation, GopherStash and GoWish validation, and middleware.
 
 ## Deployment
 

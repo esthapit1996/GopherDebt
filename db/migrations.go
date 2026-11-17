@@ -206,6 +206,18 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE`,
 		`ALTER TABLE stash_expenses ENABLE ROW LEVEL SECURITY`,
 		`DO $$ BEGIN CREATE POLICY stash_expenses_app_access ON stash_expenses USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		// GoWish: personal wishlist
+		`CREATE TABLE IF NOT EXISTS wish_items (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			link VARCHAR(2048) DEFAULT '',
+			cost DECIMAL(10, 2) NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_wish_items_user_id ON wish_items(user_id)`,
+		`ALTER TABLE wish_items ENABLE ROW LEVEL SECURITY`,
+		`DO $$ BEGIN CREATE POLICY wish_items_app_access ON wish_items USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 	}
 
 	for i, migration := range migrations {
