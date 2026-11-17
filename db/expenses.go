@@ -229,12 +229,36 @@ func DeleteExpense(db *sql.DB, expenseID int) error {
 	return nil
 }
 
-func DeleteAllGroupExpenses(db *sql.DB, groupID int) (int64, error) {
-	result, err := db.Exec(`DELETE FROM expenses WHERE group_id = $1`, groupID)
+// ClearGroupFinances wipes a group's money history: all expenses (their splits and expense
+// payments cascade) and all settlements, in one transaction. Settlements must go too, otherwise
+// they'd be left with nothing to offset and show up as new debts. Group and members are kept.
+func ClearGroupFinances(d *sql.DB, groupID int) (expenses, settlements int64, err error) {
+	tx, err := d.Begin()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return result.RowsAffected()
+	defer tx.Rollback()
+
+	result, err := tx.Exec(`DELETE FROM settlements WHERE group_id = $1`, groupID)
+	if err != nil {
+		return 0, 0, err
+	}
+	if settlements, err = result.RowsAffected(); err != nil {
+		return 0, 0, err
+	}
+
+	result, err = tx.Exec(`DELETE FROM expenses WHERE group_id = $1`, groupID)
+	if err != nil {
+		return 0, 0, err
+	}
+	if expenses, err = result.RowsAffected(); err != nil {
+		return 0, 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return expenses, settlements, nil
 }
 
 // UpdateExpense updates an existing expense and replaces its splits.
