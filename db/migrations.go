@@ -210,9 +210,10 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS wish_items (
 			id SERIAL PRIMARY KEY,
 			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-			name VARCHAR(255) NOT NULL,
+			name VARCHAR(64) NOT NULL,
+			why VARCHAR(128) DEFAULT '',
 			link VARCHAR(2048) DEFAULT '',
-			cost DECIMAL(10, 2) NOT NULL,
+			cost DECIMAL(10, 2),
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_wish_items_user_id ON wish_items(user_id)`,

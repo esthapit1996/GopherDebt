@@ -240,9 +240,9 @@ if err != nil {
 
 | Function | Parameters | Returns | Description |
 |----------|------------|---------|-------------|
-| `CreateWishItem` | `db *sql.DB, userID int, name, link string, cost float64` | `*models.WishItem, error` | Adds an item to the user's wishlist |
+| `CreateWishItem` | `db *sql.DB, userID int, name, why, link string, cost *float64` | `*models.WishItem, error` | Adds an item to the user's wishlist |
 | `GetWishItems` | `db *sql.DB, userID int` | `[]models.WishItem, error` | Returns all wishlist items for a user (newest first) |
-| `UpdateWishItem` | `db *sql.DB, itemID, userID int, name, link string, cost float64` | `*models.WishItem, error` | Updates a wishlist item (only if owned by user) |
+| `UpdateWishItem` | `db *sql.DB, itemID, userID int, name, why, link string, cost *float64` | `*models.WishItem, error` | Updates a wishlist item (only if owned by user) |
 | `DeleteWishItem` | `db *sql.DB, itemID, userID int` | `error` | Removes a wishlist item (only if owned by user) |
 
 ---

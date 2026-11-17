@@ -8,7 +8,7 @@ A full-featured expense sharing and personal finance backend built with Go, Gin,
 - **Settlements & Balances** — Track who owes whom, record payments, view debt overview
 - **Expense Payments** — Partial repayments toward specific expenses
 - **GopherStash** — Personal expense tracker with categories and spending summaries
-- **GoWish** — Personal wishlist of things to buy (name, link, cost)
+- **GoWish** — Personal wishlist of things to buy (name, why, link, cost)
 - **Receipt Scanning** — AI-powered receipt parsing via Google Gemini
 - **Currency Conversion** — Live exchange rates and historical trend data
 - **Suggestion Box** — Feature suggestions with voting, comments, and status tracking
@@ -279,11 +279,12 @@ POST /api/wish
 Authorization: Bearer <token>
 {
   "name": "Mechanical keyboard",
+  "why": "Typing on the laptop keyboard hurts",
   "link": "https://example.com/keyboard",
   "cost": 149.99
 }
 ```
-`link` is optional; if set it must be an `http(s)://` URL.
+Only `name` is required (max 64 chars). `why` (max 128 chars), `link` and `cost` are optional; `link` must be an `http(s)://` URL and `cost` must be > 0 when set.
 
 ### Scan Receipt
 ```
