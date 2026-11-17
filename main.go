@@ -83,6 +83,9 @@ func main() {
 	}
 	r.TrustedPlatform = "Fly-Client-IP"
 
+	// Uploads (receipt images, up to 14 MB) above this spill to a temp file instead of RAM (256 MB VM)
+	r.MaxMultipartMemory = 8 << 20
+
 	// CORS middleware and cache prevention
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")

@@ -34,7 +34,7 @@ Handlers are the **HTTP endpoint controllers**. They receive requests from the f
 | `wish_lists.go` | GoWish shared wish groups | `/api/wish-lists/*` |
 | `access_control.go` | Email whitelist/blacklist | `/api/whitelist/*`, `/api/blacklist/*` |
 | `receipt.go` | AI receipt scanning | `/api/receipt/scan` |
-| `handlers_test.go`, `stash_test.go`, `wish_test.go`, `wish_lists_test.go` | Handler tests | — |
+| `handlers_test.go`, `stash_test.go`, `wish_test.go`, `wish_lists_test.go`, `receipt_test.go` | Handler tests | — |
 
 ---
 
@@ -370,16 +370,26 @@ type ReceiptHandler struct{}  // No DB needed — uses external API only
 | Method | Endpoint | Function | Description |
 |--------|----------|----------|-------------|
 | POST | `/api/receipt/scan` | `ScanReceipt` | Upload receipt image → AI extracts items & total |
+| GET | `/api/receipt/config` | `ReceiptConfig` | Whether `GEMINI_API_KEY` is set |
 
 ### How It Works
 
 ```
-1. Receive multipart form with "image" file
-2. Read file bytes and encode to base64
-3. Send to Google Gemini API (gemini-2.5-flash)
-4. Gemini extracts: store_name, items (name + price), total
-5. Return structured JSON to frontend
+1. Reject bodies over 14 MB (`MaxReceiptBytes`) with 413: up front via Content-Length,
+   and while reading via http.MaxBytesReader. 14 MB is the largest image whose base64 request
+   (plus prompt) stays under Gemini's 20 MB inline-request limit (`GeminiMaxRequestBytes`);
+   `TestMaxReceiptFitsGemini` enforces this
+2. Take one of 2 scan slots (`receiptScanSlots`), else 429 "busy"
+3. Read the "image" file (above 8 MB it spills to a temp file, see MaxMultipartMemory in main.go)
+4. Sniff the real type (http.DetectContentType); non-images get 415. HEIC/HEIF are allowed by
+   their declared type because Go can't sniff them
+5. Stream the image as base64 straight into the Gemini JSON body (one encoded copy in memory)
+6. Send to Google Gemini API (gemini-2.5-flash), 60 s timeout, cancelled if the client goes away
+7. Gemini extracts: store_name, items (name + price), total
+8. Return structured JSON to frontend
 ```
+
+**Memory:** a max-size (14 MB) scan peaks at about 46 MB of heap, so 2 concurrent scans fit comfortably in the 256 MB VM. (Before this change, a 40 MB upload peaked at about 253 MB.)
 
 - Receipts in any language are supported (Gemini translates item names to English)
 - Requires `GEMINI_API_KEY` environment variable
