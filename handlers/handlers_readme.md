@@ -304,9 +304,9 @@ Shared GoWish groups, separate from debt groups. Every member has full access: r
 | Method | Endpoint | Function | Description |
 |--------|----------|----------|-------------|
 | GET | `/api/wish-lists` | `GetWishLists` | Groups the caller belongs to |
-| POST | `/api/wish-lists` | `CreateWishList` | Create a group; caller becomes first member |
+| POST | `/api/wish-lists` | `CreateWishList` | Create a group with name, description, icon and initial members; caller is always a member |
 | GET | `/api/wish-lists/:id` | `GetWishList` | Group with members |
-| PUT | `/api/wish-lists/:id` | `RenameWishList` | Rename |
+| PUT | `/api/wish-lists/:id` | `UpdateWishList` | Edit name, description and icon |
 | POST | `/api/wish-lists/:id/members` | `AddMember` | Add a user (`409` if already a member) |
 | DELETE | `/api/wish-lists/:id/members/:userId` | `RemoveMember` | Remove a member or leave (their wishes in the group are deleted); returns `list_deleted` |
 | GET | `/api/wish-lists/:id/items` | `GetItems` | Wishes, each with `added_by` |

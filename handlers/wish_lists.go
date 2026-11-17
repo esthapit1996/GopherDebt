@@ -13,7 +13,7 @@ import (
 	"gopherdebt/models"
 )
 
-// WishListHandler serves shared GoWish lists. Every member can rename the list,
+// WishListHandler serves shared GoWish lists. Every member can edit the list,
 // add/remove members and add/edit/delete items. The last member leaving deletes the list.
 type WishListHandler struct {
 	DB *sql.DB
@@ -58,19 +58,36 @@ func (h *WishListHandler) memberListID(c *gin.Context) (int, bool) {
 	return list_id, true
 }
 
-// bindWishList parses and validates a list name payload, writing a 400 on failure
-func bindWishList(c *gin.Context) (string, bool) {
+// cleanWishList trims a list payload; a blank name is rejected with a 400
+func cleanWishList(c *gin.Context, req *models.WishListRequest) bool {
+	req.Name = strings.TrimSpace(req.Name)
+	req.Description = strings.TrimSpace(req.Description)
+	req.Emoji = strings.TrimSpace(req.Emoji)
+	if req.Name == "" {
+		wishFail(c, http.StatusBadRequest, "Name is required")
+		return false
+	}
+	return true
+}
+
+// bindWishList parses and validates an update payload, writing a 400 on failure
+func bindWishList(c *gin.Context) (*models.WishListRequest, bool) {
 	var req models.WishListRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		wishFail(c, http.StatusBadRequest, "Invalid request: "+err.Error())
-		return "", false
+		return nil, false
 	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		wishFail(c, http.StatusBadRequest, "Name is required")
-		return "", false
+	return &req, cleanWishList(c, &req)
+}
+
+// bindCreateWishList parses and validates a create payload, writing a 400 on failure
+func bindCreateWishList(c *gin.Context) (*models.CreateWishListRequest, bool) {
+	var req models.CreateWishListRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		wishFail(c, http.StatusBadRequest, "Invalid request: "+err.Error())
+		return nil, false
 	}
-	return name, true
+	return &req, cleanWishList(c, &req.WishListRequest)
 }
 
 // GetWishLists returns the shared lists the caller belongs to
@@ -85,14 +102,14 @@ func (h *WishListHandler) GetWishLists(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: lists})
 }
 
-// CreateWishList creates a shared list with the caller as first member
+// CreateWishList creates a shared list with the caller and any member_ids as members
 func (h *WishListHandler) CreateWishList(c *gin.Context) {
 	user_id := c.GetInt("userID")
-	name, ok := bindWishList(c)
+	req, ok := bindCreateWishList(c)
 	if !ok {
 		return
 	}
-	list, err := db.CreateWishList(h.DB, user_id, name)
+	list, err := db.CreateWishList(h.DB, user_id, req.Name, req.Description, req.Emoji, req.MemberIDs)
 	if err != nil {
 		log.Printf("ERROR CreateWishList: user %d: %v", user_id, err)
 		wishFail(c, http.StatusInternalServerError, "Failed to create wish list")
@@ -110,23 +127,23 @@ func (h *WishListHandler) GetWishList(c *gin.Context) {
 	h.respondList(c, list_id)
 }
 
-// RenameWishList changes a shared list's name
-func (h *WishListHandler) RenameWishList(c *gin.Context) {
+// UpdateWishList changes a shared list's name, description and icon
+func (h *WishListHandler) UpdateWishList(c *gin.Context) {
 	list_id, ok := h.memberListID(c)
 	if !ok {
 		return
 	}
-	name, ok := bindWishList(c)
+	req, ok := bindWishList(c)
 	if !ok {
 		return
 	}
-	if err := db.RenameWishList(h.DB, list_id, name); err != nil {
+	if err := db.UpdateWishList(h.DB, list_id, req.Name, req.Description, req.Emoji); err != nil {
 		if err == db.ErrNotFound {
 			wishFail(c, http.StatusNotFound, "Wish list not found")
 			return
 		}
-		log.Printf("ERROR RenameWishList: list %d: %v", list_id, err)
-		wishFail(c, http.StatusInternalServerError, "Failed to rename wish list")
+		log.Printf("ERROR UpdateWishList: list %d: %v", list_id, err)
+		wishFail(c, http.StatusInternalServerError, "Failed to update wish list")
 		return
 	}
 	h.respondList(c, list_id)

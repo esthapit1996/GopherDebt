@@ -242,6 +242,9 @@ func RunMigrations(db *sql.DB) error {
 		`DO $$ BEGIN CREATE POLICY wish_lists_app_access ON wish_lists USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 		`ALTER TABLE wish_list_members ENABLE ROW LEVEL SECURITY`,
 		`DO $$ BEGIN CREATE POLICY wish_list_members_app_access ON wish_list_members USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+		// GoWish shared lists: description + icon, like debt groups
+		`ALTER TABLE wish_lists ADD COLUMN IF NOT EXISTS description VARCHAR(128) DEFAULT ''`,
+		`ALTER TABLE wish_lists ADD COLUMN IF NOT EXISTS emoji VARCHAR(10) DEFAULT '👥'`,
 	}
 
 	for i, migration := range migrations {

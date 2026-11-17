@@ -235,17 +235,27 @@ type WishMember struct {
 
 // WishList is a shared GoWish list; every member can manage its items and members
 type WishList struct {
-	ID        int          `json:"id"`
-	Name      string       `json:"name"`
-	CreatedAt time.Time    `json:"created_at"`
-	Members   []WishMember `json:"members"`
-	ItemCount int          `json:"item_count"`
-	TotalCost float64      `json:"total_cost"`
+	ID          int          `json:"id"`
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	Emoji       string       `json:"emoji"`
+	CreatedAt   time.Time    `json:"created_at"`
+	Members     []WishMember `json:"members"`
+	ItemCount   int          `json:"item_count"`
+	TotalCost   float64      `json:"total_cost"`
 }
 
-// WishListRequest is the payload for creating or renaming a shared wish list
+// WishListRequest is the payload for updating a shared wish list (same options as a debt group)
 type WishListRequest struct {
-	Name string `json:"name" binding:"required,max=64"`
+	Name        string `json:"name" binding:"required,max=64"`
+	Description string `json:"description" binding:"max=128"`
+	Emoji       string `json:"emoji" binding:"max=10"`
+}
+
+// CreateWishListRequest also takes the initial members (the creator is always added)
+type CreateWishListRequest struct {
+	WishListRequest
+	MemberIDs []int `json:"member_ids" binding:"max=50,dive,gt=0"`
 }
 
 // WishListMemberRequest is the payload for adding a member to a shared wish list

@@ -173,9 +173,9 @@ Separate from debt groups. Each member has their own section of wishes in the gr
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/wish-lists` | Groups I'm a member of (with members, item count, total cost) |
-| POST | `/api/wish-lists` | Create a group (`{"name"}`, max 64); creator becomes first member |
+| POST | `/api/wish-lists` | Create a group (`{"name", "description", "emoji", "member_ids"}`, same options as a debt group); creator is always a member |
 | GET | `/api/wish-lists/:id` | Get a group with its members |
-| PUT | `/api/wish-lists/:id` | Rename a group |
+| PUT | `/api/wish-lists/:id` | Edit a group's name, description and icon |
 | POST | `/api/wish-lists/:id/members` | Add a member (`{"user_id"}`) |
 | DELETE | `/api/wish-lists/:id/members/:userId` | Remove a member (and their wishes in the group), or leave (own ID); returns `{"list_deleted"}` |
 | GET | `/api/wish-lists/:id/items` | Wishes in the group (each with `added_by`) |

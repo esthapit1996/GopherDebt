@@ -18,7 +18,7 @@ func TestWishListHandler_InvalidIDs(t *testing.T) {
 	h := NewWishListHandler(nil)
 	r := gin.New()
 	r.GET("/wish-lists/:id", h.GetWishList)
-	r.PUT("/wish-lists/:id", h.RenameWishList)
+	r.PUT("/wish-lists/:id", h.UpdateWishList)
 	r.POST("/wish-lists/:id/members", h.AddMember)
 	r.DELETE("/wish-lists/:id/members/:userId", h.RemoveMember)
 	r.GET("/wish-lists/:id/items", h.GetItems)
@@ -49,15 +49,15 @@ func TestWishListHandler_InvalidIDs(t *testing.T) {
 	}
 }
 
-func TestBindWishList(t *testing.T) {
+func TestBindCreateWishList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.POST("/wish-lists", func(c *gin.Context) {
-		name, ok := bindWishList(c)
+		req, ok := bindCreateWishList(c)
 		if !ok {
 			return
 		}
-		c.JSON(http.StatusCreated, gin.H{"name": name})
+		c.JSON(http.StatusCreated, req)
 	})
 
 	cases := []struct {
@@ -65,9 +65,15 @@ func TestBindWishList(t *testing.T) {
 		body string
 		want int
 	}{
-		{"valid", `{"name":"Flat stuff"}`, http.StatusCreated},
-		{"at limit", `{"name":"` + strings.Repeat("a", 64) + `"}`, http.StatusCreated},
-		{"too long", `{"name":"` + strings.Repeat("a", 65) + `"}`, http.StatusBadRequest},
+		{"name only", `{"name":"Flat stuff"}`, http.StatusCreated},
+		{"all options", `{"name":"Flat","description":"Things for the flat","emoji":"🏠","member_ids":[2,3]}`, http.StatusCreated},
+		{"family emoji", `{"name":"Family","emoji":"👨‍👩‍👧‍👦"}`, http.StatusCreated},
+		{"name at limit", `{"name":"` + strings.Repeat("a", 64) + `"}`, http.StatusCreated},
+		{"name too long", `{"name":"` + strings.Repeat("a", 65) + `"}`, http.StatusBadRequest},
+		{"description at limit", `{"name":"x","description":"` + strings.Repeat("a", 128) + `"}`, http.StatusCreated},
+		{"description too long", `{"name":"x","description":"` + strings.Repeat("a", 129) + `"}`, http.StatusBadRequest},
+		{"emoji too long", `{"name":"x","emoji":"` + strings.Repeat("a", 11) + `"}`, http.StatusBadRequest},
+		{"bad member id", `{"name":"x","member_ids":[2,0]}`, http.StatusBadRequest},
 		{"empty body", `{}`, http.StatusBadRequest},
 		{"whitespace", `{"name":"   "}`, http.StatusBadRequest},
 	}

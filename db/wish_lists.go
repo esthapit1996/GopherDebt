@@ -4,21 +4,26 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/lib/pq"
+
 	"gopherdebt/models"
 )
+
+// DefaultWishListEmoji is used when a list is created without an icon
+const DefaultWishListEmoji = "👥"
 
 // ErrAlreadyMember is returned when adding a user who is already in the wish list
 var ErrAlreadyMember = errors.New("already a member")
 
 type scanner interface{ Scan(...any) error }
 
-const wishListSelect = `SELECT wl.id, wl.name, wl.created_at,
+const wishListSelect = `SELECT wl.id, wl.name, COALESCE(wl.description, ''), COALESCE(wl.emoji, '👥'), wl.created_at,
 	(SELECT COUNT(*) FROM wish_items wi WHERE wi.list_id = wl.id),
 	(SELECT COALESCE(SUM(wi.cost), 0) FROM wish_items wi WHERE wi.list_id = wl.id)
 	FROM wish_lists wl`
 
 func scanWishList(row scanner, l *models.WishList) error {
-	return row.Scan(&l.ID, &l.Name, &l.CreatedAt, &l.ItemCount, &l.TotalCost)
+	return row.Scan(&l.ID, &l.Name, &l.Description, &l.Emoji, &l.CreatedAt, &l.ItemCount, &l.TotalCost)
 }
 
 // wishListMembers runs a (list_id, user id, name, avatar) query and groups the rows by list
@@ -44,8 +49,12 @@ func wishListMembers(d *sql.DB, query string, arg int) (map[int][]models.WishMem
 const wishMemberSelect = `SELECT m.list_id, u.id, u.name, COALESCE(u.avatar, '')
 	FROM wish_list_members m JOIN users u ON u.id = m.user_id`
 
-// CreateWishList creates a shared list with the creator as its first member
-func CreateWishList(d *sql.DB, userID int, name string) (*models.WishList, error) {
+// CreateWishList creates a shared list with the creator as first member, plus any memberIDs.
+// Unknown user IDs are skipped.
+func CreateWishList(d *sql.DB, userID int, name, description, emoji string, memberIDs []int) (*models.WishList, error) {
+	if emoji == "" {
+		emoji = DefaultWishListEmoji
+	}
 	tx, err := d.Begin()
 	if err != nil {
 		return nil, err
@@ -54,8 +63,8 @@ func CreateWishList(d *sql.DB, userID int, name string) (*models.WishList, error
 
 	var list_id int
 	if err := tx.QueryRow(
-		`INSERT INTO wish_lists (name, created_by) VALUES ($1, $2) RETURNING id`,
-		name, userID,
+		`INSERT INTO wish_lists (name, description, emoji, created_by) VALUES ($1, $2, $3, $4) RETURNING id`,
+		name, description, emoji, userID,
 	).Scan(&list_id); err != nil {
 		return nil, err
 	}
@@ -64,6 +73,16 @@ func CreateWishList(d *sql.DB, userID int, name string) (*models.WishList, error
 		list_id, userID,
 	); err != nil {
 		return nil, err
+	}
+	if len(memberIDs) > 0 {
+		if _, err := tx.Exec(
+			`INSERT INTO wish_list_members (list_id, user_id)
+			 SELECT $1, u.id FROM users u WHERE u.id = ANY($2)
+			 ON CONFLICT (list_id, user_id) DO NOTHING`,
+			list_id, pq.Array(memberIDs),
+		); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -137,9 +156,15 @@ func GetWishList(d *sql.DB, listID int) (*models.WishList, error) {
 	})
 }
 
-// RenameWishList changes a shared list's name
-func RenameWishList(d *sql.DB, listID int, name string) error {
-	result, err := d.Exec(`UPDATE wish_lists SET name = $1 WHERE id = $2`, name, listID)
+// UpdateWishList changes a shared list's name, description and icon
+func UpdateWishList(d *sql.DB, listID int, name, description, emoji string) error {
+	if emoji == "" {
+		emoji = DefaultWishListEmoji
+	}
+	result, err := d.Exec(
+		`UPDATE wish_lists SET name = $1, description = $2, emoji = $3 WHERE id = $4`,
+		name, description, emoji, listID,
+	)
 	if err != nil {
 		return err
 	}
