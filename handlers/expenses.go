@@ -521,17 +521,18 @@ func (h *ExpenseHandler) ClearAllExpenses(c *gin.Context) {
 		return
 	}
 
-	deleted, err := db.DeleteAllGroupExpenses(h.DB, groupID)
+	// Clears everything (expenses + settlements) so every balance ends at 0; the frontend confirms first
+	expenses, settlements, err := db.ClearGroupFinances(h.DB, groupID)
 	if err != nil {
-		log.Printf("ERROR ClearAllExpenses: DeleteAllGroupExpenses group %d: %v", groupID, err)
+		log.Printf("ERROR ClearAllExpenses: ClearGroupFinances group %d: %v", groupID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to clear expenses"})
 		return
 	}
 
-	desc := fmt.Sprintf("Cleared %d expenses", deleted)
+	desc := fmt.Sprintf("Cleared %d expenses and %d settlements", expenses, settlements)
 	db.LogActivity(h.DB, groupID, userID, db.ActivityExpenseDeleted, desc, nil, nil)
 
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: fmt.Sprintf("Cleared %d expenses", deleted)})
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: desc})
 }
 
 func (h *ExpenseHandler) MarkExpensePaid(c *gin.Context) {

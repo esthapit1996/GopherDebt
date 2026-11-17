@@ -88,7 +88,7 @@ go build -o gopherdebt .
 | GET | `/api/groups/:id/expenses/unpaid` | Get unpaid expenses |
 | GET | `/api/groups/:id/expenses/:expenseID` | Get expense details |
 | DELETE | `/api/groups/:id/expenses/:expenseID` | Delete expense (payer only) |
-| DELETE | `/api/groups/:id/expenses` | Clear all group expenses |
+| DELETE | `/api/groups/:id/expenses` | Clear all group expenses and settlements (every balance back to 0; group and members kept) |
 
 ### Expense Payments (Protected)
 

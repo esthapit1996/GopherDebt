@@ -93,9 +93,13 @@ type UserHandler struct {
 | Method | Endpoint | Function | Description |
 |--------|----------|----------|-------------|
 | POST | `/api/groups/:id/expenses` | `CreateExpense` | Creates expense with splits |
-| GET | `/api/groups/:id/expenses` | `GetExpenses` | Lists all expenses in group |
-| GET | `/api/groups/:id/expenses/:expenseId` | `GetExpense` | Gets single expense details |
-| DELETE | `/api/groups/:id/expenses/:expenseId` | `DeleteExpense` | Removes an expense |
+| PUT | `/api/groups/:id/expenses/:expenseID` | `UpdateExpense` | Edits an expense and replaces its splits |
+| GET | `/api/groups/:id/expenses` | `GetGroupExpenses` | Lists all expenses in group |
+| GET | `/api/groups/:id/expenses/unpaid` | `GetUnpaidExpenses` | Expenses the caller still owes on |
+| GET | `/api/groups/:id/expenses/:expenseID` | `GetExpense` | Gets single expense details |
+| DELETE | `/api/groups/:id/expenses/:expenseID` | `DeleteExpense` | Removes an expense |
+| PUT | `/api/groups/:id/expenses/:expenseID/paid` | `MarkExpensePaid` | Toggles the expense's paid flag |
+| DELETE | `/api/groups/:id/expenses` | `ClearAllExpenses` | **Clear all**: deletes every expense (with splits and expense payments) **and every settlement** in the group in one transaction, so all balances end at 0. Group and members are kept. Any member can do it; the frontend asks for confirmation |
 
 ### Split Types
 

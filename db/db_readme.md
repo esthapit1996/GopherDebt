@@ -82,6 +82,7 @@ This folder contains all database operations for GopherDebt. Each file handles C
 | `GetGroupExpenses` | `db *sql.DB, groupID int` | `[]models.Expense, error` | Lists all expenses in a group |
 | `GetExpenseSplits` | `db *sql.DB, expenseID int` | `[]models.ExpenseSplit, error` | Gets how an expense is split |
 | `DeleteExpense` | `db *sql.DB, expenseID int` | `error` | Deletes an expense (cascades to splits) |
+| `ClearGroupFinances` | `db *sql.DB, groupID int` | `expenses, settlements int64, err error` | Deletes all of a group's expenses (splits and expense payments cascade) **and** settlements in one transaction, so every balance ends at 0. Settlements must go too, or they'd show up as new debts |
 
 ---
 
