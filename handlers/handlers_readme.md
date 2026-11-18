@@ -323,13 +323,16 @@ Personal endpoints only see wishes with `list_id IS NULL`, so shared wishes can'
 | `status` | Meaning |
 |----------|---------|
 | `ok` | `name`, `price`, `currency` (ISO 4217) found; `source` is `page` (shop data) or `ai` |
-| `blocked` | The shop refused automated reading (401/403/429/503/999, or a captcha / bot-check page) |
+| `blocked` | The shop refused automated reading: 401/403/429/503/999, a captcha or bot-check page (also when served with 200, e.g. Amazon's "continue shopping" page), or a page whose only "name" is the shop's own name (`isSiteName`). Bot pages never go to the AI |
 | `not_found` | The page loaded but has no product name or price |
 | `unreachable` | Couldn't load it (timeout, 404, not HTML, refused address) |
 
 **How it reads the page:**
 1. The page's structured product data, which costs nothing: JSON-LD `Product` (also inside `@graph` or arrays; `Offer` / `AggregateOffer` / `priceSpecification`), `product:price` / `og:price` meta tags, and `itemprop="price"` microdata.
-2. Only if the name or price is missing: a text excerpt of up to 12k characters (title, description, h1, visible text; no scripts or styles) goes to OpenAI with a strict `{name, price, currency}` schema. It uses the same model as receipts and costs about $0.0005 per lookup with `gpt-6-luna`. The prompt treats the page text as data, not instructions.
+   **Name:** the first candidate that isn't just the shop's own name, in this order: JSON-LD name, `og:title`, `id="productTitle"` (Amazon), each `<h1>`, then the page `<title>` / `<meta name="title">` with shop-name parts removed ("Amazon.de: X : Amazon.de: Küche" → "X"). The shop's name is checked against both the pasted host and the host after redirects (short links like `amzn.eu` → `amazon.de`).
+2. Only if the name or price is missing (and the page isn't a bot page): a text excerpt of up to 12k characters goes to OpenAI with a strict `{name, price, currency}` schema. The excerpt leads with the title, product title, description, headings and up to 12 short "price-looking" texts (elements whose class or id mentions "price"), then the visible text without scripts, styles or `nav` / `header` / `footer` / `aside`. It uses the same model as receipts and costs about $0.0005 per lookup with `gpt-6-luna`. The prompt treats the page text as data, not instructions. If the page's name is longer than the 64-character field, the AI's shorter name is used.
+
+**Long names:** any name over 64 characters (Amazon titles, for example) is shortened by one tiny extra AI call (`shortenName`, only the name is sent, about 100 tokens). It keeps the brand, product type and key details (model, size, capacity, colour) and drops marketing text and feature lists, in the original language. Without AI, or if the answer is still too long, the name is cut at a word boundary (`cutAtWord`).
 
 **Security (SSRF):** the server fetches a URL the user chose, so:
 - Only `http` / `https` on ports 80 and 443. No `user:pass@` URLs, no `localhost` / `*.internal`.

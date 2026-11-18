@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -105,7 +106,7 @@ func TestExtractProductInfo(t *testing.T) {
 			"Running Shoes", 120, "GBP"},
 	}
 	for _, tc := range cases {
-		info := extractProductInfo(&productPage{body: []byte("<html>" + tc.html + "</html>")})
+		info := extractProductInfo(&productPage{body: []byte("<html>" + tc.html + "</html>")}, []string{"shop.example"})
 		if info.name != tc.wantName || info.price == nil || *info.price != tc.wantPrice || info.currency != tc.wantCurrency {
 			got := "nil"
 			if info.price != nil {
@@ -116,7 +117,7 @@ func TestExtractProductInfo(t *testing.T) {
 		}
 	}
 	// No product data: name from the heading, no price, and the text excerpt is collected for the AI
-	info := extractProductInfo(&productPage{body: []byte(`<html><head><title>Shop</title><style>.x{}</style></head><body><h1>Handmade Mug</h1><p>Only 24,90 € today</p><script>var secret=1</script></body></html>`)})
+	info := extractProductInfo(&productPage{body: []byte(`<html><head><title>Shop</title><style>.x{}</style></head><body><h1>Handmade Mug</h1><p>Only 24,90 € today</p><script>var secret=1</script></body></html>`)}, []string{"shop.example"})
 	if info.name != "Handmade Mug" || info.price != nil || !strings.Contains(info.excerpt, "24,90") || strings.Contains(info.excerpt, "secret") {
 		t.Errorf("plain page: %+v", info)
 	}
@@ -214,4 +215,239 @@ func TestLookupWishEndpoint(t *testing.T) {
 	if code, _ := lookup(shop.URL + "/structured"); code != http.StatusBadRequest {
 		t.Errorf("private address in URL should be rejected, got %d", code)
 	}
+}
+
+func TestIsSiteName(t *testing.T) {
+	yes := [][2]string{{"Amazon", "www.amazon.it"}, {"Amazon.it", "www.amazon.it"}, {"amazon.co.uk", "amazon.co.uk"}, {" AMAZON ", "smile.amazon.de"}}
+	no := [][2]string{{"Echo Dot (4th gen)", "www.amazon.it"}, {"IT", "www.amazon.it"}, {"", "www.amazon.it"}, {"Amazon Kindle", "www.amazon.it"}}
+	for _, c := range yes {
+		if !isSiteName(c[0], c[1]) {
+			t.Errorf("%q on %s should count as the site's own name", c[0], c[1])
+		}
+	}
+	for _, c := range no {
+		if isSiteName(c[0], c[1]) {
+			t.Errorf("%q on %s is a real product name", c[0], c[1])
+		}
+	}
+}
+
+// Amazon-style pages: a bot wall served with 200 and a title, and a page whose only name is the shop
+func TestLookupWishShopNameOnlyPages(t *testing.T) {
+	allowPrivateLookups = true
+	defer func() { allowPrivateLookups = false }()
+	shop := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		switch r.URL.Path {
+		case "/interstitial": // 200 + title, "continue shopping" button, no product
+			io.WriteString(w, `<title>Amazon.it</title><h1>Click the button below to continue shopping</h1><form action="/errors/validateCaptcha"></form>`)
+		case "/generic": // no bot markers, only the shop's name
+			io.WriteString(w, `<html><head><meta property="og:title" content="127.0.0.1"></head><body><p>Welcome to our store</p></body></html>`)
+		}
+	}))
+	defer shop.Close()
+
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	aiCalls := 0
+	ai := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		aiCalls++
+		// The AI also only finds the shop's name
+		io.WriteString(w, `{"output":[{"type":"message","content":[{"type":"output_text","text":"{\"name\":\"127.0.0.1\",\"price\":null,\"currency\":null}"}]}]}`)
+	}))
+	defer ai.Close()
+	old := openaiEndpoint
+	openaiEndpoint = ai.URL
+	defer func() { openaiEndpoint = old }()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/wish/lookup", NewWishHandler(nil).LookupWish)
+	lookup := func(link string) wishLookupResult {
+		body, _ := json.Marshal(map[string]string{"url": link})
+		req := httptest.NewRequest("POST", "/api/wish/lookup", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		var out struct {
+			Data wishLookupResult `json:"data"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &out)
+		return out.Data
+	}
+
+	if res := lookup(shop.URL + "/interstitial"); res.Status != lookupBlocked || res.Name != "" || aiCalls != 0 {
+		t.Errorf("bot interstitial: %+v (AI calls %d), want blocked without calling the AI", res, aiCalls)
+	}
+	if res := lookup(shop.URL + "/generic"); res.Status != lookupBlocked || res.Name != "" {
+		t.Errorf("shop-name-only page: %+v, want blocked", res)
+	}
+}
+
+func TestCleanTitle(t *testing.T) {
+	hosts := []string{"amzn.eu", "www.amazon.de"}
+	cases := map[string]string{
+		"Amazon.de: Pressure Cooker 6L : Amazon.de: Küche, Haushalt & Wohnen":                  "Pressure Cooker 6L",
+		"Running Shoes - Men - shop.example":                                                   "Running Shoes",
+		"Amazon.de: CREATE/PRESSURE COOKER STUDIO/Multifunktioneller Schnellkochtopf 6L Mokka": "CREATE/PRESSURE COOKER STUDIO/Multifunktioneller Schnellkochtopf 6L Mokka",
+		"Desk Lamp | Amazon.de": "Desk Lamp",
+		"Amazon.de":             "Amazon.de", // only the shop: returned as is, recognised by the caller
+	}
+	for in, want := range cases {
+		if got := cleanTitle(in, hosts); got != want {
+			t.Errorf("cleanTitle(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The real case: amzn.eu short link → amazon.de product page without structured data
+func TestExtractAmazonStylePage(t *testing.T) {
+	hosts := []string{"amzn.eu", "www.amazon.de"}
+	page := `<html><head><title>Amazon.de: Pressure Cooker 6L Mokka : Amazon.de: Küche</title>
+<meta name="title" content="Amazon.de: Pressure Cooker 6L Mokka : Amazon.de: Küche"></head><body>
+<header><h1>Amazon</h1><a>Alle Kategorien</a><span class="nav-price">Prime 8,99 €</span></header>
+<nav>Bestseller Angebote Kundenservice Neuerscheinungen</nav>
+<h1 id="title"><span id="productTitle">  Pressure Cooker 6L Mokka  </span></h1>
+<div id="corePrice"><span class="a-price"><span class="a-offscreen">89,99 €</span></span></div>
+<footer>Impressum Amazon.de</footer></body></html>`
+	info := extractProductInfo(&productPage{body: []byte(page), finalHost: "www.amazon.de"}, hosts)
+	if info.name != "Pressure Cooker 6L Mokka" || info.onlySiteName {
+		t.Errorf("name = %q (onlySiteName %v), want the product title", info.name, info.onlySiteName)
+	}
+	if info.price != nil {
+		t.Errorf("no structured price on the page, got %v", *info.price)
+	}
+	if !strings.Contains(info.excerpt, "PRICE TEXT: 89,99 €") || !strings.Contains(info.excerpt, "PRODUCT TITLE: Pressure Cooker 6L Mokka") {
+		t.Errorf("excerpt should lead with the product title and price:\n%s", info.excerpt[:min(len(info.excerpt), 300)])
+	}
+	for _, chrome := range []string{"Alle Kategorien", "Bestseller", "Impressum", "Prime 8,99"} {
+		if strings.Contains(info.excerpt, chrome) {
+			t.Errorf("excerpt should skip header/nav/footer text, found %q", chrome)
+		}
+	}
+
+	// What a data-centre IP can get instead: a generic page that only says "Amazon"
+	generic := extractProductInfo(&productPage{body: []byte(`<title>Amazon.de</title><h1>Amazon</h1><p>Hallo</p>`), finalHost: "www.amazon.de"}, hosts)
+	if generic.name != "" || !generic.onlySiteName {
+		t.Errorf("generic Amazon page: name %q, onlySiteName %v; want no name and onlySiteName", generic.name, generic.onlySiteName)
+	}
+}
+
+// Long page titles (Amazon) give way to the AI's short name when the AI runs anyway
+func TestLookupWishPrefersShortAIName(t *testing.T) {
+	allowPrivateLookups = true
+	defer func() { allowPrivateLookups = false }()
+	long := strings.Repeat("Pressure Cooker Studio Multifunctional ", 4)
+	shop := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, `<h1>`+long+`</h1><span class="price">119,95 €</span>`)
+	}))
+	defer shop.Close()
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	ai := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"output":[{"type":"message","content":[{"type":"output_text","text":"{\"name\":\"Pressure Cooker Studio 6L\",\"price\":119.95,\"currency\":\"EUR\"}"}]}]}`)
+	}))
+	defer ai.Close()
+	old := openaiEndpoint
+	openaiEndpoint = ai.URL
+	defer func() { openaiEndpoint = old }()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/wish/lookup", NewWishHandler(nil).LookupWish)
+	body, _ := json.Marshal(map[string]string{"url": shop.URL + "/p"})
+	req := httptest.NewRequest("POST", "/api/wish/lookup", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	var out struct {
+		Data wishLookupResult `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &out)
+	if out.Data.Name != "Pressure Cooker Studio 6L" || out.Data.Price == nil || *out.Data.Price != 119.95 {
+		t.Errorf("got %+v, want the AI's short name and price", out.Data)
+	}
+}
+
+func TestCutAtWord(t *testing.T) {
+	long := "CREATE/PRESSURE COOKER STUDIO/Multifunktioneller programmierbarer elektrischer Schnellkochtopf 6L"
+	got := cutAtWord(long, 64)
+	if utf8.RuneCountInString(got) > 64 || strings.HasSuffix(got, " ") || strings.HasSuffix(got, "/") || got != "CREATE/PRESSURE COOKER STUDIO/Multifunktioneller" {
+		t.Errorf("cutAtWord = %q (%d chars)", got, utf8.RuneCountInString(got))
+	}
+	if cutAtWord("Short name", 64) != "Short name" {
+		t.Error("short names must stay as they are")
+	}
+	nospace := strings.Repeat("x", 80)
+	if utf8.RuneCountInString(cutAtWord(nospace, 64)) != 64 {
+		t.Error("a name without spaces is cut at the limit")
+	}
+}
+
+// A shop with full product data but a very long name: one tiny AI call shortens it, price stays from the page
+func TestLookupWishShortensLongNames(t *testing.T) {
+	allowPrivateLookups = true
+	defer func() { allowPrivateLookups = false }()
+	long := "CREATE/PRESSURE COOKER STUDIO/Multifunktioneller programmierbarer elektrischer Schnellkochtopf 6L Mokka / 15 Funktionen, 24h Timer"
+	shop := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, `<script type="application/ld+json">{"@type":"Product","name":"`+long+`","offers":{"price":"119.95","priceCurrency":"EUR"}}</script>`)
+	}))
+	defer shop.Close()
+
+	var aiReply string
+	var aiPrompts []string
+	ai := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		json.NewDecoder(r.Body).Decode(&req)
+		aiPrompts = append(aiPrompts, req["input"].([]any)[0].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string))
+		io.WriteString(w, `{"output":[{"type":"message","content":[{"type":"output_text","text":`+strconvQuote(aiReply)+`}]}]}`)
+	}))
+	defer ai.Close()
+	old := openaiEndpoint
+	openaiEndpoint = ai.URL
+	defer func() { openaiEndpoint = old }()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/wish/lookup", NewWishHandler(nil).LookupWish)
+	lookup := func() wishLookupResult {
+		body, _ := json.Marshal(map[string]string{"url": shop.URL + "/p"})
+		req := httptest.NewRequest("POST", "/api/wish/lookup", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		var out struct {
+			Data wishLookupResult `json:"data"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &out)
+		return out.Data
+	}
+
+	// AI keeps the important details
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	aiReply = `{"name":"Create Pressure Cooker Studio 6L, Mokka"}`
+	res := lookup()
+	if res.Name != "Create Pressure Cooker Studio 6L, Mokka" || res.Price == nil || *res.Price != 119.95 || res.Source != "page" {
+		t.Errorf("shortened by AI: %+v", res)
+	}
+	if len(aiPrompts) != 1 || !strings.Contains(aiPrompts[0], "at most 60 characters") || !strings.Contains(aiPrompts[0], long) {
+		t.Errorf("expected exactly one shortening call with the long name, got %d", len(aiPrompts))
+	}
+
+	// AI answers too long: cut at a word instead
+	aiReply = `{"name":"` + long + `"}`
+	if res := lookup(); utf8.RuneCountInString(res.Name) > 64 || res.Name != cutAtWord(long, 64) {
+		t.Errorf("AI too long → word cut, got %q", res.Name)
+	}
+
+	// No AI configured: cut at a word
+	t.Setenv("OPENAI_API_KEY", "")
+	if res := lookup(); res.Name != cutAtWord(long, 64) {
+		t.Errorf("without AI → word cut, got %q", res.Name)
+	}
+}
+
+func strconvQuote(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }
