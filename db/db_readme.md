@@ -47,11 +47,14 @@ This folder contains all database operations for GopherDebt. Each file handles C
 
 | Function | Parameters | Returns | Description |
 |----------|------------|---------|-------------|
-| `CreateUser` | `db *sql.DB, email, passwordHash, name string` | `*models.User, error` | Creates a new user with default theme 'dark' |
+| `CreateUser` | `db *sql.DB, email, passwordHash, name string` | `*models.User, error` | Creates a new user with defaults (theme `darkknight`, language `en`) |
 | `GetUserByEmail` | `db *sql.DB, email string` | `*models.User, error` | Finds user by email, ignoring letter case (oldest account wins if case variants exist); used for login and the register duplicate check |
 | `GetUserByID` | `db *sql.DB, id int` | `*models.User, error` | Finds user by their ID |
-| `GetAllUsers` | `db *sql.DB` | `[]models.User, error` | Returns all users (for member selection) |
+| `GetAllUsers` | `db *sql.DB` | `[]models.User, error` | Returns all users except deleted ones (for member selection) |
 | `UpdateUserTheme` | `db *sql.DB, userID int, theme string` | `error` | Updates user's theme preference |
+| `UpdateUserPassword` | `db *sql.DB, userID int, newPasswordHash string` | `int, error` | Sets the password and bumps `token_version` (logs out other sessions); returns the new version |
+| `GetSessionState` | `db *sql.DB, userID int` | `tokenVersion int, active bool, err error` | Used by `middleware.ActiveUser` on every request. `active` is false if the account is deleted or its email is blacklisted |
+| `DeleteUser` | `db *sql.DB, userID int` | `error` | Anonymizes the account (see `handlers_readme.md`, "Deleting a user"); `ErrNotFound` if already deleted |
 
 ---
 
