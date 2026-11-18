@@ -69,7 +69,7 @@ func main() {
 	suggestionHandler := handlers.NewSuggestionHandler(database)
 	currencyHandler := handlers.NewCurrencyHandler()
 	accessControlHandler := handlers.NewAccessControlHandler(database)
-	receiptHandler := handlers.NewReceiptHandler()
+	receiptHandler := handlers.NewReceiptHandler(database)
 	stashHandler := handlers.NewStashHandler(database)
 	wishHandler := handlers.NewWishHandler(database)
 	wishListHandler := handlers.NewWishListHandler(database)

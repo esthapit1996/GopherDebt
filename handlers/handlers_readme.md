@@ -32,6 +32,7 @@ Handlers are the **HTTP endpoint controllers**. They receive requests from the f
 | `stash.go` | GopherStash personal expenses | `/api/stash/*` |
 | `wish.go` | GoWish personal wishlist | `/api/wish/*` |
 | `wish_lookup.go` | Product link → name/price for the Add wish form | `/api/wish/lookup` |
+| `ai_guard.go` | AI guardrails shared by receipts and wish lookups | — |
 | `wish_lists.go` | GoWish shared wish groups | `/api/wish-lists/*` |
 | `access_control.go` | Email whitelist/blacklist | `/api/whitelist/*`, `/api/blacklist/*` |
 | `receipt.go` | AI receipt scanning | `/api/receipt/scan` |
@@ -326,6 +327,9 @@ Personal endpoints only see wishes with `list_id IS NULL`, so shared wishes can'
 | `blocked` | The shop refused automated reading: 401/403/429/503/999, a captcha or bot-check page (also when served with 200, e.g. Amazon's "continue shopping" page), or a page whose only "name" is the shop's own name (`isSiteName`). Bot pages never go to the AI |
 | `not_found` | The page loaded but has no product name or price |
 | `unreachable` | Couldn't load it (timeout, 404, not HTML, refused address) |
+| `limit` | Nothing could be found without the AI, and the user's daily AI allowance is used up |
+
+An `ok` answer can carry `"ai_limit": true` when the AI would have been needed (usually for the price) but the allowance is used up.
 
 **How it reads the page:**
 1. The page's structured product data, which costs nothing: JSON-LD `Product` (also inside `@graph` or arrays; `Offer` / `AggregateOffer` / `priceSpecification`), `product:price` / `og:price` meta tags, and `itemprop="price"` microdata.
@@ -339,6 +343,18 @@ Personal endpoints only see wishes with `list_id IS NULL`, so shared wishes can'
 - Every connection, including after a redirect (max 5), must resolve to a public IP. This is checked on the resolved address at dial time (`checkLookupDial`), so DNS names pointing at private ranges and DNS rebinding are blocked. Refused ranges include loopback, RFC 1918, link-local (cloud metadata `169.254.169.254`), CGNAT, multicast, Fly's private `fdaa::/16` (ULA) and NAT64.
 - Limits: 10 s timeout, only the first 2 MB of the page, 64 KB of headers, `text/html` only, no proxy, at most 4 lookups at once (429 beyond).
 - No cookies or auth headers are sent. The User-Agent identifies the bot: `GopherDebtBot/1.0`.
+
+## 🔧 ai_guard.go (AI guardrails)
+
+These apply to every OpenAI call (receipt scans, wish page reading, name shortening):
+
+| Guardrail | Details |
+|-----------|---------|
+| **Daily limit per user** | `db.TakeAIQuota` counts calls per user, day (UTC) and kind in `ai_usage`, in one atomic statement, so parallel requests can't overshoot. Limits: `AI_DAILY_RECEIPT_SCANS` (default 20) and `AI_DAILY_WISH_LOOKUPS` (default 30); `0` turns that AI use off. A receipt over the limit gets 429, so the frontend reads it on-device (OCR). A wish lookup gets status `limit`, or `ai_limit: true` with the shop data it found. A quota database error fails closed (no AI call). |
+| **Token usage log** | Each call logs `AI usage: <kind> user <id> model <model>: N input + M output tokens`, from the API's `usage` block. |
+| **Lookup cache** | Complete wish lookups (name **and** price, no limit hit) are kept in memory for 24 h (max 500 links), so the same link costs nothing again. Partial or failed answers aren't cached. |
+| **No AI for pages without prices** | `hasPriceText`: if the page text has nothing like "€ 12,50" / "$9.99" / "25 EUR", it's not a product page, so the AI isn't asked. |
+| **Free first** (`wish_lookup.go`) | Shop structured data is used whenever present; bot pages never go to the AI; long names are only shortened when over 64 characters. |
 
 ## 🔧 wish_lists.go
 

@@ -31,6 +31,7 @@ This folder contains all database operations for GopherDebt. Each file handles C
 | `retry.go` | Generic retry with backoff for transient DB errors |
 | `migrations.go` | Database schema creation and updates |
 | `security.go` | Locks Supabase's REST API out of the app tables; case-insensitive unique emails |
+| `ai_usage.go` | Per-user daily AI call counts (`TakeAIQuota`) |
 
 ---
 
@@ -186,6 +187,7 @@ For each expense_payment:
 | `wish_items` | GoWish wishes (`list_id` NULL = personal, set = in a shared group) |
 | `wish_lists` | GoWish shared wish groups |
 | `wish_list_members` | Members of each shared wish group |
+| `ai_usage` | AI calls per user, day and kind (`receipt`, `wish`), for the daily limits; rows older than 30 days are deleted at boot |
 | `email_whitelist` | Approved registration emails |
 | `email_blacklist` | Blocked registration emails |
 

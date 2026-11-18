@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -164,6 +165,7 @@ const (
 	lookupBlocked     = "blocked"     // the shop refused automated reading (403/429/captcha…)
 	lookupNotFound    = "not_found"   // page loaded, but no product name/price on it
 	lookupUnreachable = "unreachable" // couldn't load the page (bad link, timeout, not HTML, 404…)
+	lookupLimit       = "limit"       // the AI was needed, but the user's daily AI allowance is used up
 )
 
 type wishLookupRequest struct {
@@ -176,6 +178,7 @@ type wishLookupResult struct {
 	Price    *float64 `json:"price,omitempty"`
 	Currency string   `json:"currency,omitempty"` // ISO 4217, e.g. "EUR"
 	Source   string   `json:"source,omitempty"`   // "page" (shop data) or "ai"
+	AILimit  bool     `json:"ai_limit,omitempty"` // the AI was needed (e.g. for the price) but today's allowance is used up
 }
 
 // LookupWish handles POST /api/wish/lookup {"url"}: reads the product page and returns name/price
@@ -191,6 +194,13 @@ func (h *WishHandler) LookupWish(c *gin.Context) {
 		return
 	}
 
+	// The same link within 24 h: answer from memory (no page fetch, no AI)
+	cache_key := u.String()
+	if cached, ok := cachedLookup(cache_key); ok {
+		c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: cached})
+		return
+	}
+
 	select {
 	case lookupSlots <- struct{}{}:
 		defer func() { <-lookupSlots }()
@@ -198,6 +208,8 @@ func (h *WishHandler) LookupWish(c *gin.Context) {
 		wishFail(c, http.StatusTooManyRequests, "Too many lookups right now, please try again in a moment")
 		return
 	}
+	user_id := c.GetInt("userID")
+	hit_limit := false
 
 	page, status := fetchProductPage(c.Request.Context(), u)
 	if status != "" {
@@ -220,7 +232,11 @@ func (h *WishHandler) LookupWish(c *gin.Context) {
 			c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: wishLookupResult{Status: lookupBlocked}})
 			return
 		}
-		if ai, err := lookupWithAI(c.Request.Context(), u.String(), info.excerpt); err != nil {
+		// A page with no price-looking text at all (articles, category pages) isn't worth an AI call
+		if !hasPriceText(info.excerpt) {
+			log.Printf("LookupWish: no price text on %s, skipping AI", u.Host)
+		} else if ai, err := lookupWithAI(c.Request.Context(), h.DB, user_id, u.String(), info.excerpt); err != nil {
+			hit_limit = hit_limit || errors.Is(err, errAIQuota)
 			log.Printf("LookupWish: AI fallback for %s: %v", u.Host, err)
 		} else {
 			if isSiteNameAny(ai.name, hosts) {
@@ -240,18 +256,30 @@ func (h *WishHandler) LookupWish(c *gin.Context) {
 	}
 
 	// Too long for the 64-character field: let the AI keep the important details (or cut at a word)
-	result.Name = shortenName(c.Request.Context(), result.Name, hosts)
+	result.Name = shortenName(c.Request.Context(), h.DB, user_id, result.Name, hosts)
 	if result.Name == "" && result.Price == nil {
 		status := lookupNotFound
-		if saw_site_name {
+		switch {
+		case hit_limit:
+			status = lookupLimit // the AI would have been needed, but today's allowance is used up
+		case saw_site_name:
 			// All we could see was the shop's own name: it showed us a generic or bot page instead of the product
 			status = lookupBlocked
 		}
 		c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: wishLookupResult{Status: status}})
 		return
 	}
+	result.AILimit = hit_limit
+	storeLookup(cache_key, result)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: result})
 }
+
+// hasPriceText reports whether the text contains something like "€ 12,50", "$9.99", "119,95€" or "25 EUR"
+func hasPriceText(s string) bool {
+	return priceTextPattern.MatchString(s)
+}
+
+var priceTextPattern = regexp.MustCompile(`(?i)[€$£¥₹]\s?\d|\d[\d.,]*\s?(?:€|\$|£|¥|₹|eur\b|usd\b|gbp\b|chf\b|sek\b|nok\b|dkk\b|pln\b|czk\b|huf\b)`)
 
 type productPage struct {
 	body      []byte
@@ -660,10 +688,13 @@ const lookupSchema = `{"type":"object","properties":{"name":{"type":["string","n
 
 // callOpenAIJSON sends one text prompt to the Responses API with a strict JSON schema and decodes the
 // answer into out (same model as receipts)
-func callOpenAIJSON(ctx context.Context, schemaName, schema, prompt string, out any) error {
+func callOpenAIJSON(ctx context.Context, d *sql.DB, userID int, schemaName, schema, prompt string, out any) error {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return errors.New("AI not available")
+	}
+	if err := allowAICall(d, userID, aiKindWish); err != nil {
+		return err
 	}
 	body, err := json.Marshal(map[string]any{
 		"model": receiptModel(),
@@ -695,7 +726,8 @@ func callOpenAIJSON(ctx context.Context, schemaName, schema, prompt string, out 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("OpenAI returned %d", resp.StatusCode)
 	}
-	text, refusal, err := openAIOutputText(respBody)
+	text, refusal, usage, err := openAIOutputText(respBody)
+	logAIUsage(aiKindWish+"/"+schemaName, userID, receiptModel(), usage)
 	if err != nil || refusal != "" || text == "" {
 		return fmt.Errorf("no answer (refusal %q, err %v)", refusal, err)
 	}
@@ -703,7 +735,7 @@ func callOpenAIJSON(ctx context.Context, schemaName, schema, prompt string, out 
 }
 
 // lookupWithAI sends the page excerpt to OpenAI when the shop has no product data
-func lookupWithAI(ctx context.Context, pageURL, excerpt string) (productInfo, error) {
+func lookupWithAI(ctx context.Context, d *sql.DB, userID int, pageURL, excerpt string) (productInfo, error) {
 	if strings.TrimSpace(excerpt) == "" {
 		return productInfo{}, errors.New("empty page")
 	}
@@ -712,7 +744,7 @@ func lookupWithAI(ctx context.Context, pageURL, excerpt string) (productInfo, er
 		Price    *float64 `json:"price"`
 		Currency *string  `json:"currency"`
 	}
-	if err := callOpenAIJSON(ctx, "product", lookupSchema, lookupPrompt+"\n\nPAGE URL: "+pageURL+"\n\nPAGE TEXT:\n"+excerpt, &out); err != nil {
+	if err := callOpenAIJSON(ctx, d, userID, "product", lookupSchema, lookupPrompt+"\n\nPAGE URL: "+pageURL+"\n\nPAGE TEXT:\n"+excerpt, &out); err != nil {
 		return productInfo{}, err
 	}
 	var info productInfo
@@ -744,7 +776,7 @@ const shortenSchema = `{"type":"object","properties":{"name":{"type":"string"}},
 // shortenName fits a long product name into the wish name field: the AI keeps the important details
 // (about 100 tokens, a fraction of a cent); without AI, or if its answer is still too long, the name is
 // cut at a word boundary
-func shortenName(ctx context.Context, name string, hosts []string) string {
+func shortenName(ctx context.Context, d *sql.DB, userID int, name string, hosts []string) string {
 	name = strings.TrimSpace(name)
 	if utf8.RuneCountInString(name) <= wishNameMax {
 		return name
@@ -752,7 +784,7 @@ func shortenName(ctx context.Context, name string, hosts []string) string {
 	var out struct {
 		Name string `json:"name"`
 	}
-	if err := callOpenAIJSON(ctx, "short_name", shortenSchema, shortenPrompt+name, &out); err != nil {
+	if err := callOpenAIJSON(ctx, d, userID, "short_name", shortenSchema, shortenPrompt+name, &out); err != nil {
 		log.Printf("LookupWish: shortening name: %v", err)
 	} else if short := strings.TrimSpace(out.Name); short != "" && utf8.RuneCountInString(short) <= wishNameMax && !isSiteNameAny(short, hosts) {
 		return short

@@ -40,6 +40,8 @@ go build -o gopherdebt .
 | `PORT` | No | `8080` | Server port |
 | `OPENAI_API_KEY` | No | — | OpenAI API key for receipt scanning (without it, the app uses on-device OCR) |
 | `OPENAI_RECEIPT_MODEL` | No | `gpt-6-luna` | OpenAI model that reads receipts and, as a fallback, product pages for wish links |
+| `AI_DAILY_RECEIPT_SCANS` | No | `20` | AI receipt scans per user per day (over it: on-device OCR); `0` turns AI scanning off |
+| `AI_DAILY_WISH_LOOKUPS` | No | `30` | AI calls for wish links per user per day (page reading + name shortening; shop data is free and doesn't count) |
 
 ## API Endpoints
 
@@ -349,6 +351,7 @@ Max 14 MB (413 if larger), to keep server memory bounded. JPEG, PNG, WEBP or GIF
 │   ├── stash.go           # GopherStash endpoints
 │   ├── wish.go            # GoWish personal endpoints
 │   ├── wish_lookup.go     # Product link → name/price (shop data first, OpenAI fallback, SSRF-safe)
+│   ├── ai_guard.go        # AI guardrails: daily per-user limits, token usage log, lookup cache
 │   ├── wish_lists.go      # GoWish shared group endpoints
 │   ├── access_control.go  # Whitelist/blacklist (founder only)
 │   ├── receipt.go         # AI receipt scanning via OpenAI

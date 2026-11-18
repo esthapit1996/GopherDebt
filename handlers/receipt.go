@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -81,10 +82,12 @@ const receiptSchema = `{
 	"additionalProperties": false
 }`
 
-type ReceiptHandler struct{}
+type ReceiptHandler struct {
+	DB *sql.DB // for the per-user daily AI limit
+}
 
-func NewReceiptHandler() *ReceiptHandler {
-	return &ReceiptHandler{}
+func NewReceiptHandler(database *sql.DB) *ReceiptHandler {
+	return &ReceiptHandler{DB: database}
 }
 
 func receiptModel() string {
@@ -153,6 +156,17 @@ func (h *ReceiptHandler) ScanReceipt(c *gin.Context) {
 		return
 	}
 
+	// Daily AI limit per user. Over it → 429, so the frontend reads the receipt on the device (OCR) instead
+	user_id := c.GetInt("userID")
+	if err := allowAICall(h.DB, user_id, aiKindReceipt); err != nil {
+		if errors.Is(err, errAIQuota) {
+			c.JSON(http.StatusTooManyRequests, models.APIResponse{Success: false, Error: "Daily AI scan limit reached"})
+		} else {
+			c.JSON(http.StatusServiceUnavailable, models.APIResponse{Success: false, Error: "AI scanning is temporarily unavailable"})
+		}
+		return
+	}
+
 	body, err := buildOpenAIRequest(file, header.Size, mime_type, receiptModel())
 	if err != nil {
 		log.Printf("ERROR ScanReceipt: building request: %v", err)
@@ -194,7 +208,8 @@ func (h *ReceiptHandler) ScanReceipt(c *gin.Context) {
 		return
 	}
 
-	text, refusal, err := openAIOutputText(respBody)
+	text, refusal, usage, err := openAIOutputText(respBody)
+	logAIUsage(aiKindReceipt, user_id, receiptModel(), usage)
 	if err != nil {
 		log.Printf("ERROR ScanReceipt: parsing OpenAI response: %v", err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to parse AI response"})
@@ -216,9 +231,10 @@ func (h *ReceiptHandler) ScanReceipt(c *gin.Context) {
 
 // openAIOutputText pulls the answer out of a Responses API reply: the text of the "output_text"
 // parts of the message output items (or a refusal). A top-level "output_text" is used if present.
-func openAIOutputText(body []byte) (text, refusal string, err error) {
+func openAIOutputText(body []byte) (text, refusal string, usage openAIUsage, err error) {
 	var r struct {
-		OutputText string `json:"output_text"`
+		Usage      openAIUsage `json:"usage"`
+		OutputText string      `json:"output_text"`
 		Output     []struct {
 			Type    string `json:"type"`
 			Content []struct {
@@ -229,10 +245,10 @@ func openAIOutputText(body []byte) (text, refusal string, err error) {
 		} `json:"output"`
 	}
 	if err := json.Unmarshal(body, &r); err != nil {
-		return "", "", err
+		return "", "", openAIUsage{}, err
 	}
 	if r.OutputText != "" {
-		return r.OutputText, "", nil
+		return r.OutputText, "", r.Usage, nil
 	}
 	var sb strings.Builder
 	for _, item := range r.Output {
@@ -248,7 +264,7 @@ func openAIOutputText(body []byte) (text, refusal string, err error) {
 			}
 		}
 	}
-	return sb.String(), refusal, nil
+	return sb.String(), refusal, r.Usage, nil
 }
 
 // receiptMimeType sniffs the file's real type (the client-sent header is not trusted) and rewinds it
