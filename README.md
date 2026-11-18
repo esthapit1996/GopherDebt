@@ -39,7 +39,7 @@ go build -o gopherdebt .
 | `JWT_SECRET` | Yes | — | Secret key for JWT token signing (server refuses to start without it) |
 | `PORT` | No | `8080` | Server port |
 | `OPENAI_API_KEY` | No | — | OpenAI API key for receipt scanning (without it, the app uses on-device OCR) |
-| `OPENAI_RECEIPT_MODEL` | No | `gpt-6-luna` | OpenAI model that reads receipts |
+| `OPENAI_RECEIPT_MODEL` | No | `gpt-6-luna` | OpenAI model that reads receipts and, as a fallback, product pages for wish links |
 
 ## API Endpoints
 
@@ -164,6 +164,7 @@ go build -o gopherdebt .
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/wish` | Get all wishlist items (newest first) |
+| POST | `/api/wish/lookup` | Read a product link (`{"url"}`) → `{status, name, price, currency, source}` to fill in the Add wish form |
 | POST | `/api/wish` | Add a wishlist item |
 | PUT | `/api/wish/:id` | Update a wishlist item |
 | DELETE | `/api/wish/:id` | Delete a wishlist item |
@@ -347,6 +348,7 @@ Max 14 MB (413 if larger), to keep server memory bounded. JPEG, PNG, WEBP or GIF
 │   ├── currency.go        # Currency conversion (cached external APIs)
 │   ├── stash.go           # GopherStash endpoints
 │   ├── wish.go            # GoWish personal endpoints
+│   ├── wish_lookup.go     # Product link → name/price (shop data first, OpenAI fallback, SSRF-safe)
 │   ├── wish_lists.go      # GoWish shared group endpoints
 │   ├── access_control.go  # Whitelist/blacklist (founder only)
 │   ├── receipt.go         # AI receipt scanning via OpenAI

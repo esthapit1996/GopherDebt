@@ -224,6 +224,8 @@ func main() {
 
 		// GoWish routes (personal wishlist)
 		api.GET("/wish", wishHandler.GetWishItems)
+		// Read a product link and return its name/price for the "Add wish" form (shop data first, AI fallback)
+		api.POST("/wish/lookup", wishHandler.LookupWish)
 		api.POST("/wish", wishHandler.CreateWishItem)
 		api.PUT("/wish/:id", wishHandler.UpdateWishItem)
 		api.DELETE("/wish/:id", wishHandler.DeleteWishItem)

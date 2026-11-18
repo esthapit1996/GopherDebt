@@ -31,6 +31,7 @@ Handlers are the **HTTP endpoint controllers**. They receive requests from the f
 | `currency.go` | Currency conversion | `/api/currency/*` |
 | `stash.go` | GopherStash personal expenses | `/api/stash/*` |
 | `wish.go` | GoWish personal wishlist | `/api/wish/*` |
+| `wish_lookup.go` | Product link → name/price for the Add wish form | `/api/wish/lookup` |
 | `wish_lists.go` | GoWish shared wish groups | `/api/wish-lists/*` |
 | `access_control.go` | Email whitelist/blacklist | `/api/whitelist/*`, `/api/blacklist/*` |
 | `receipt.go` | AI receipt scanning | `/api/receipt/scan` |
@@ -314,6 +315,27 @@ type WishHandler struct {
 Personal endpoints only see wishes with `list_id IS NULL`, so shared wishes can't be read or changed through `/api/wish`.
 
 ---
+
+## 🔧 wish_lookup.go
+
+`POST /api/wish/lookup` with `{"url": "https://shop…/product"}` fills in the Add wish form. It always answers 200 with a `status`, except for an invalid or forbidden URL, which gets 400:
+
+| `status` | Meaning |
+|----------|---------|
+| `ok` | `name`, `price`, `currency` (ISO 4217) found; `source` is `page` (shop data) or `ai` |
+| `blocked` | The shop refused automated reading (401/403/429/503/999, or a captcha / bot-check page) |
+| `not_found` | The page loaded but has no product name or price |
+| `unreachable` | Couldn't load it (timeout, 404, not HTML, refused address) |
+
+**How it reads the page:**
+1. The page's structured product data, which costs nothing: JSON-LD `Product` (also inside `@graph` or arrays; `Offer` / `AggregateOffer` / `priceSpecification`), `product:price` / `og:price` meta tags, and `itemprop="price"` microdata.
+2. Only if the name or price is missing: a text excerpt of up to 12k characters (title, description, h1, visible text; no scripts or styles) goes to OpenAI with a strict `{name, price, currency}` schema. It uses the same model as receipts and costs about $0.0005 per lookup with `gpt-6-luna`. The prompt treats the page text as data, not instructions.
+
+**Security (SSRF):** the server fetches a URL the user chose, so:
+- Only `http` / `https` on ports 80 and 443. No `user:pass@` URLs, no `localhost` / `*.internal`.
+- Every connection, including after a redirect (max 5), must resolve to a public IP. This is checked on the resolved address at dial time (`checkLookupDial`), so DNS names pointing at private ranges and DNS rebinding are blocked. Refused ranges include loopback, RFC 1918, link-local (cloud metadata `169.254.169.254`), CGNAT, multicast, Fly's private `fdaa::/16` (ULA) and NAT64.
+- Limits: 10 s timeout, only the first 2 MB of the page, 64 KB of headers, `text/html` only, no proxy, at most 4 lookups at once (429 beyond).
+- No cookies or auth headers are sent. The User-Agent identifies the bot: `GopherDebtBot/1.0`.
 
 ## 🔧 wish_lists.go
 
