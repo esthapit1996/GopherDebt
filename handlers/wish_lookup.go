@@ -236,7 +236,9 @@ func (h *WishHandler) LookupWish(c *gin.Context) {
 		}
 		// A page with no price-looking text at all (articles, category pages) isn't worth an AI call,
 		// nor a product whose price the shop only shows in the cart (the AI can't find what isn't there)
-		if info.name != "" && info.price == nil && info.priceInCart {
+		if !wishAIEnabled() {
+			log.Printf("LookupWish: wish AI is off, skipping AI for %s", u.Host)
+		} else if info.name != "" && info.price == nil && info.priceInCart {
 			result.PriceInCart = true
 			log.Printf("LookupWish: price only in cart on %s, skipping AI", u.Host)
 		} else if !hasPriceText(info.excerpt) {
@@ -874,6 +876,10 @@ func callOpenAIJSON(ctx context.Context, d *sql.DB, userID int, schemaName, sche
 	return json.Unmarshal([]byte(text), out)
 }
 
+// wishAIEnabled is false when AI_DAILY_WISH_LOOKUPS=0: wish lookups then use shop data only,
+// with no AI call and no "limit" message (receipts are unaffected)
+func wishAIEnabled() bool { return aiDailyLimit(aiKindWish) > 0 }
+
 // lookupWithAI sends the page excerpt to OpenAI when the shop has no product data
 func lookupWithAI(ctx context.Context, d *sql.DB, userID int, pageURL, excerpt string) (productInfo, error) {
 	if strings.TrimSpace(excerpt) == "" {
@@ -921,6 +927,9 @@ func shortenName(ctx context.Context, d *sql.DB, userID int, name string, hosts 
 	name = strings.TrimSpace(name)
 	if utf8.RuneCountInString(name) <= wishNameMax {
 		return name
+	}
+	if !wishAIEnabled() {
+		return cutAtWord(name, wishNameMax)
 	}
 	var out struct {
 		Name string `json:"name"`

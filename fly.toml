@@ -11,6 +11,7 @@ primary_region = 'ams'
 [env]
   GIN_MODE = 'release'
   PORT = '8080'
+  AI_DAILY_WISH_LOOKUPS = '0' # wish AI off (shop data only); remove to turn it back on
 
 [http_service]
   internal_port = 8080

@@ -369,6 +369,42 @@ func TestLookupWishPrefersShortAIName(t *testing.T) {
 	}
 }
 
+// AI_DAILY_WISH_LOOKUPS=0 turns the wish AI off: no AI call, no "limit" message, long names are cut
+func TestLookupWishAIOff(t *testing.T) {
+	allowPrivateLookups = true
+	defer func() { allowPrivateLookups = false }()
+	t.Setenv("AI_DAILY_WISH_LOOKUPS", "0")
+	long := strings.Repeat("Pressure Cooker Studio Multifunctional ", 4)
+	shop := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, `<h1>`+long+`</h1><span class="price">119,95 €</span>`)
+	}))
+	defer shop.Close()
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	ai_calls := 0
+	ai := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { ai_calls++ }))
+	defer ai.Close()
+	old := openaiEndpoint
+	openaiEndpoint = ai.URL
+	defer func() { openaiEndpoint = old }()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/wish/lookup", NewWishHandler(nil).LookupWish)
+	body, _ := json.Marshal(map[string]string{"url": shop.URL + "/p"})
+	req := httptest.NewRequest("POST", "/api/wish/lookup", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	var out struct {
+		Data wishLookupResult `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &out)
+	if ai_calls != 0 || out.Data.AILimit || out.Data.Status != lookupOK || utf8.RuneCountInString(out.Data.Name) > wishNameMax {
+		t.Errorf("AI off: %+v, AI calls %d", out.Data, ai_calls)
+	}
+}
+
 func TestCutAtWord(t *testing.T) {
 	long := "CREATE/PRESSURE COOKER STUDIO/Multifunktioneller programmierbarer elektrischer Schnellkochtopf 6L"
 	got := cutAtWord(long, 64)
