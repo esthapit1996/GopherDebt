@@ -41,7 +41,7 @@ go build -o gopherdebt .
 | `OPENAI_API_KEY` | No | — | OpenAI API key for receipt scanning (without it, the app uses on-device OCR) |
 | `OPENAI_RECEIPT_MODEL` | No | `gpt-6-luna` | OpenAI model that reads receipts and, as a fallback, product pages for wish links |
 | `AI_DAILY_RECEIPT_SCANS` | No | `20` | AI receipt scans per user per day (over it: on-device OCR); `0` turns AI scanning off |
-| `AI_DAILY_WISH_LOOKUPS` | No | `30` | AI calls for wish links per user per day (page reading + name shortening; shop data is free and doesn't count) |
+| `AI_DAILY_WISH_LOOKUPS` | No | `50` | AI calls for wish links per user per day (page reading + name shortening; shop data is free and doesn't count) |
 
 ## API Endpoints
 
