@@ -63,7 +63,7 @@ func scanRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.MaxMultipartMemory = 8 << 20
-	r.POST("/receipt/scan", NewReceiptHandler().ScanReceipt)
+	r.POST("/receipt/scan", NewReceiptHandler(nil).ScanReceipt)
 	return r
 }
 

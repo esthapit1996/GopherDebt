@@ -234,6 +234,17 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0`,
 		// Deleted accounts are anonymized, not removed, so their money records and history stay intact
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
+		// Per-user daily AI call counts (receipt scans, wish lookups) for the AI guardrails
+		`CREATE TABLE IF NOT EXISTS ai_usage (
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			day DATE NOT NULL,
+			kind VARCHAR(20) NOT NULL,
+			count INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (user_id, day, kind)
+		)`,
+		`ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY`,
+		// Only today's counts matter; keep a month for looking back
+		`DELETE FROM ai_usage WHERE day < CURRENT_DATE - 30`,
 	}
 
 	for i, migration := range migrations {

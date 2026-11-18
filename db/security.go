@@ -13,6 +13,7 @@ var appTables = []string{
 	"users", "groups", "group_members", "expenses", "expense_splits", "settlements",
 	"expense_payments", "activity_log", "suggestions", "suggestion_votes", "suggestion_comments",
 	"email_whitelist", "email_blacklist", "stash_expenses", "wish_items", "wish_lists", "wish_list_members",
+	"ai_usage",
 }
 
 // Supabase's auto-generated REST API (PostgREST) runs as these roles

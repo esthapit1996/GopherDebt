@@ -411,6 +411,7 @@ func TestLookupWishShortensLongNames(t *testing.T) {
 	r := gin.New()
 	r.POST("/api/wish/lookup", NewWishHandler(nil).LookupWish)
 	lookup := func() wishLookupResult {
+		resetLookupCache()
 		body, _ := json.Marshal(map[string]string{"url": shop.URL + "/p"})
 		req := httptest.NewRequest("POST", "/api/wish/lookup", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
