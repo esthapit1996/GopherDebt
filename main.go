@@ -137,6 +137,8 @@ func main() {
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	api.Use(apiLimiter.Middleware())
+	// Deleted / blacklisted accounts and tokens from before a password change are rejected
+	api.Use(middleware.ActiveUser(database))
 	{
 		// User routes
 		api.GET("/profile", userHandler.GetProfile)

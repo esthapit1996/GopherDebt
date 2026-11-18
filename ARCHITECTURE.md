@@ -63,6 +63,7 @@ GopherDebt/
 ├── middleware/          # Request processing
 │   ├── middleware_readme.md # 📖 Documentation
 │   ├── auth.go          # JWT authentication
+│   ├── active_user.go   # Rejects deleted/blacklisted accounts, outdated tokens
 │   ├── auth_test.go     # Auth middleware tests
 │   └── rate_limit.go    # Per-IP rate limiting
 └── models/              # Data structures
@@ -146,6 +147,8 @@ No authentication required.
 ```go
 api := r.Group("/api")
 api.Use(middleware.AuthMiddleware())
+api.Use(apiLimiter.Middleware())
+api.Use(middleware.ActiveUser(database)) // deleted / blacklisted accounts, outdated tokens → 401
 {
     api.GET("/profile", userHandler.GetProfile)
     // ... all protected routes
@@ -233,8 +236,10 @@ Starts listening for HTTP requests.
 2. User logs in → bcrypt.Compare → JWT token generated
 3. Frontend stores token in localStorage
 4. Every API request includes: "Authorization: Bearer <token>"
-5. AuthMiddleware validates token → extracts userID → sets in context
-6. Handler reads userID from context: c.GetInt("userID")
+5. AuthMiddleware validates token → extracts userID (+ token version) → sets in context
+6. ActiveUser checks the account still exists, isn't deleted or blacklisted, and the token
+   version matches (a password change bumps it, logging out other devices)
+7. Handler reads userID from context: c.GetInt("userID")
 ```
 
 ---

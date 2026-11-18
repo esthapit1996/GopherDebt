@@ -21,7 +21,7 @@ Handlers are the **HTTP endpoint controllers**. They receive requests from the f
 
 | File | Purpose | Endpoints |
 |------|---------|-----------|
-| `users.go` | Auth & user profile | `/api/register`, `/api/login`, `/api/me` |
+| `users.go` | Auth & user profile | `/api/register`, `/api/login`, `/api/profile/*`, `/api/users/*` |
 | `groups.go` | Group management | `/api/groups/*` |
 | `expenses.go` | Expense CRUD | `/api/groups/:id/expenses/*` |
 | `settlements.go` | Direct payments & balances | `/api/groups/:id/settle`, `/api/groups/:id/balances` |
@@ -59,16 +59,24 @@ type UserHandler struct {
 | Method | Endpoint | Function | Description |
 |--------|----------|----------|-------------|
 | POST | `/api/register` | `Register` | Creates new user (email trimmed + lowercased; checks blacklist, whitelist and case-insensitive duplicates; hashes password) |
-| POST | `/api/login` | `Login` | Validates credentials (email matched ignoring case), returns JWT token |
-| GET | `/api/me` | `GetProfile` | Returns current user's profile |
-| GET | `/api/users` | `GetAllUsers` | Returns all users (for member selection) |
-| PUT | `/api/me/theme` | `UpdateTheme` | Updates user's theme preference |
+| POST | `/api/login` | `Login` | Validates credentials (email matched ignoring case). A blacklisted email gets 403 "This account has been blocked" (checked after the password). Returns a JWT carrying the user's `token_version` |
+| GET | `/api/profile` | `GetProfile` | Returns current user's profile |
+| GET | `/api/users` | `GetAllUsers` | Returns all users except deleted ones (for member selection) |
+| DELETE | `/api/users/:id` | `DeleteUser` | Founder only. **Anonymizes** the account (see below); 404 if already deleted; the founder can't be deleted |
+| PUT | `/api/profile/theme` | `UpdateTheme` | Updates user's theme preference |
+| PUT | `/api/profile/avatar` | `UpdateAvatar` | Updates user's avatar |
+| PUT | `/api/profile/language` | `UpdateLanguage` | Updates user's language (`en` / `it`) |
+| PUT | `/api/profile/password` | `ChangePassword` | Changes the password and bumps `token_version`, which logs out every other device; returns `{"token"}` for the current one |
+
+### Deleting a user
+
+Accounts are anonymized, not removed, so other people's balances and group history stay correct. The row is renamed "Deleted user", gets an unusable email (`deleted-<id>@deleted.invalid`) and password, and all its tokens are revoked. GopherStash, wishes, wish-group memberships and the whitelist entry are removed. The user leaves every debt group where they're settled. Where they still owe or are owed money they stay as "Deleted user", so the others can still record settling up. Groups they created and all money records are kept.
 
 ### Helper Functions
 
 | Function | Parameters | Returns | Description |
 |----------|------------|---------|-------------|
-| `generateJWT` | `userID int` | `string, error` | Creates a signed JWT token (24h expiry) |
+| `generateJWT` | `userID, tokenVersion int` | `string, error` | Creates a signed JWT (7-day expiry) with claims `user_id`, `tv` (token version), `exp`, `iat` |
 
 ---
 

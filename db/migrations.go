@@ -230,6 +230,10 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE wish_lists ADD COLUMN IF NOT EXISTS emoji VARCHAR(10) DEFAULT '👥'`,
 		// Payment history "clear" only hides entries up to this time for that user; nothing is deleted
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS history_cleared_at TIMESTAMP`,
+		// Login tokens carry token_version; bumping it (password change, deletion) invalidates older tokens
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0`,
+		// Deleted accounts are anonymized, not removed, so their money records and history stay intact
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
 	}
 
 	for i, migration := range migrations {

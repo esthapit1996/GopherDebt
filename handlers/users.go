@@ -105,7 +105,19 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := generateJWT(user.ID)
+	// Blacklisting also blocks existing accounts (checked after the password, so it isn't an email oracle)
+	blocked, err := db.IsEmailBlacklisted(h.DB, user.Email)
+	if err != nil {
+		log.Printf("ERROR Login: IsEmailBlacklisted failed for user %d: %v", user.ID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to log in"})
+		return
+	}
+	if blocked {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Error: "This account has been blocked"})
+		return
+	}
+
+	token, err := generateJWT(user.ID, user.TokenVersion)
 	if err != nil {
 		log.Printf("ERROR Login: generateJWT failed for user %d: %v", user.ID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to generate token"})
@@ -326,17 +338,25 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	// Update password
-	if err := db.UpdateUserPassword(h.DB, userID, string(newHash)); err != nil {
+	// Update password. This bumps token_version, logging out every other device; this one gets a new token.
+	version, err := db.UpdateUserPassword(h.DB, userID, string(newHash))
+	if err != nil {
 		log.Printf("ERROR ChangePassword: UpdateUserPassword failed for user %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to update password"})
 		return
 	}
+	token, err := generateJWT(userID, version)
+	if err != nil {
+		log.Printf("ERROR ChangePassword: generateJWT failed for user %d: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Password changed, please log in again"})
+		return
+	}
 
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Password changed successfully"})
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Password changed successfully", Data: gin.H{"token": token}})
 }
 
-func generateJWT(userID int) (string, error) {
+// generateJWT issues a 7-day token. "tv" must match users.token_version (see middleware.ActiveUser).
+func generateJWT(userID, tokenVersion int) (string, error) {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		return "", errors.New("JWT_SECRET is not set")
@@ -344,6 +364,7 @@ func generateJWT(userID int) (string, error) {
 
 	claims := jwt.MapClaims{
 		"user_id": userID,
+		"tv":      tokenVersion,
 		"exp":     time.Now().Add(time.Hour * 24 * 7).Unix(),
 		"iat":     time.Now().Unix(),
 	}
@@ -396,6 +417,11 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 
 	// Delete the user
 	if err := db.DeleteUser(h.DB, userID); err != nil {
+		if err == db.ErrNotFound {
+			// Already deleted (anonymized)
+			c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Error: "User not found"})
+			return
+		}
 		log.Printf("ERROR DeleteUser: DeleteUser failed for %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Error: "Failed to delete user"})
 		return

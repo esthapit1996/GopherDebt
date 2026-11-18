@@ -57,7 +57,7 @@ go build -o gopherdebt .
 |--------|----------|-------------|
 | GET | `/api/profile` | Get current user profile |
 | GET | `/api/users` | Get all users |
-| DELETE | `/api/users/:id` | Delete a user |
+| DELETE | `/api/users/:id` | Delete a user (founder only; anonymized as "Deleted user" so balances and history stay correct) |
 | GET | `/api/debt-overview` | Get debt overview across all groups |
 | GET | `/api/debt-overview/:userId` | Get debt details with a specific user |
 | GET | `/api/payment-history` | Get payment history |
@@ -356,6 +356,7 @@ Max 14 MB (413 if larger), so the base64 request stays under Gemini's 20 MB inli
 │   └── receipt_test.go    # Receipt scan limits + Gemini request (fake server)
 ├── middleware/
 │   ├── auth.go            # JWT authentication
+│   ├── active_user.go     # Rejects deleted/blacklisted accounts, outdated tokens
 │   ├── rate_limit.go      # Per-IP rate limiting
 │   └── auth_test.go       # Auth middleware tests
 └── models/

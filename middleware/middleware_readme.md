@@ -18,6 +18,7 @@ Middleware functions run **before** your handlers. They can validate requests, a
 | File | Purpose |
 |------|---------|
 | `auth.go` | JWT authentication middleware |
+| `active_user.go` | Rejects deleted / blacklisted accounts and outdated tokens |
 | `rate_limit.go` | Per-IP rate limiting middleware |
 | `auth_test.go` | Authentication middleware tests |
 
@@ -37,8 +38,8 @@ Middleware functions run **before** your handlers. They can validate requests, a
 1. Request comes in with header: "Authorization: Bearer <token>"
 2. Middleware extracts the token string
 3. Parses and validates the JWT signature using JWT_SECRET
-4. Extracts user_id from token claims
-5. Sets userID in Gin context: c.Set("userID", userID)
+4. Extracts user_id (and tv, the token version; missing = 0) from token claims
+5. Sets userID and tokenVersion in Gin context
 6. Calls c.Next() to proceed to handler
 ```
 
@@ -68,6 +69,18 @@ Request → [AuthMiddleware] → Handler
 | Not "Bearer <token>" format | 401 | "Invalid authorization header format" |
 | Invalid/expired JWT | 401 | "Invalid or expired token" |
 | Missing user_id in claims | 401 | "Invalid user ID in token" |
+
+---
+
+## 🔧 active_user.go
+
+`ActiveUser(db)` runs after `AuthMiddleware` (and the rate limiter) on every `/api` route. A valid signature isn't enough. It loads `db.GetSessionState` and returns **401 "Session is no longer valid"** if any of these is true:
+
+- the account no longer exists, or was deleted (anonymized)
+- the account's email is blacklisted
+- the token's `tv` doesn't match `users.token_version` (the password was changed, or the account deleted)
+
+A database error returns 503. The frontend treats 401 as "session expired" and logs out.
 
 ### Environment Variables
 

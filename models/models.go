@@ -13,6 +13,8 @@ type User struct {
 	Language        string    `json:"language"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+	// Goes into login tokens; bumped on password change / account deletion to invalidate older tokens
+	TokenVersion int `json:"-"`
 }
 
 // CreateUserRequest is the payload for creating a new user

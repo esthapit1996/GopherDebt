@@ -81,7 +81,11 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// Tokens issued before token versions existed have no "tv": treat as 0 (every account starts at 0)
+		tokenVersion, _ := claims["tv"].(float64)
+
 		c.Set("userID", int(userID))
+		c.Set("tokenVersion", int(tokenVersion))
 		c.Next()
 	}
 }
