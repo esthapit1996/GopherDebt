@@ -57,6 +57,7 @@ GopherDebt/
 │   ├── currency.go      # Currency conversion endpoints
 │   ├── stash.go         # GopherStash endpoints
 │   ├── wish.go          # GoWish personal endpoints
+│   ├── wish_lookup.go   # Product link lookup for wishes (SSRF-safe fetch, OpenAI fallback)
 │   ├── wish_lists.go    # GoWish shared group endpoints
 │   ├── access_control.go # Whitelist/blacklist (founder only)
 │   └── receipt.go       # AI receipt scanning (OpenAI, key server-side)
