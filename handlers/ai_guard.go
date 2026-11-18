@@ -22,7 +22,7 @@ import (
 // AI call kinds and their default daily limits per user (override with the env vars)
 const (
 	aiKindReceipt = "receipt" // AI_DAILY_RECEIPT_SCANS, default 20
-	aiKindWish    = "wish"    // AI_DAILY_WISH_LOOKUPS, default 30 (page reading + name shortening)
+	aiKindWish    = "wish"    // AI_DAILY_WISH_LOOKUPS, default 50 (page reading + name shortening; text is cheaper than receipt images)
 )
 
 var errAIQuota = errors.New("daily AI limit reached")
@@ -31,7 +31,7 @@ var errAIQuota = errors.New("daily AI limit reached")
 var takeAIQuota = db.TakeAIQuota
 
 func aiDailyLimit(kind string) int {
-	env, def := "AI_DAILY_WISH_LOOKUPS", 30
+	env, def := "AI_DAILY_WISH_LOOKUPS", 50
 	if kind == aiKindReceipt {
 		env, def = "AI_DAILY_RECEIPT_SCANS", 20
 	}

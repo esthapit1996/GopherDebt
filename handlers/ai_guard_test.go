@@ -27,7 +27,7 @@ func withQuota(t *testing.T, allowed bool) {
 func TestAIDailyLimitDefaultsAndOverrides(t *testing.T) {
 	t.Setenv("AI_DAILY_RECEIPT_SCANS", "")
 	t.Setenv("AI_DAILY_WISH_LOOKUPS", "")
-	if aiDailyLimit(aiKindReceipt) != 20 || aiDailyLimit(aiKindWish) != 30 {
+	if aiDailyLimit(aiKindReceipt) != 20 || aiDailyLimit(aiKindWish) != 50 {
 		t.Errorf("defaults: receipt %d, wish %d", aiDailyLimit(aiKindReceipt), aiDailyLimit(aiKindWish))
 	}
 	t.Setenv("AI_DAILY_RECEIPT_SCANS", "5")
