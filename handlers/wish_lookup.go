@@ -179,6 +179,8 @@ type wishLookupResult struct {
 	Currency string   `json:"currency,omitempty"` // ISO 4217, e.g. "EUR"
 	Source   string   `json:"source,omitempty"`   // "page" (shop data) or "ai"
 	AILimit  bool     `json:"ai_limit,omitempty"` // the AI was needed (e.g. for the price) but today's allowance is used up
+	// The shop only shows the price in the cart (Amazon "add to cart to see the price"): there's no price to read
+	PriceInCart bool `json:"price_in_cart,omitempty"`
 }
 
 // LookupWish handles POST /api/wish/lookup {"url"}: reads the product page and returns name/price
@@ -232,8 +234,12 @@ func (h *WishHandler) LookupWish(c *gin.Context) {
 			c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: wishLookupResult{Status: lookupBlocked}})
 			return
 		}
-		// A page with no price-looking text at all (articles, category pages) isn't worth an AI call
-		if !hasPriceText(info.excerpt) {
+		// A page with no price-looking text at all (articles, category pages) isn't worth an AI call,
+		// nor a product whose price the shop only shows in the cart (the AI can't find what isn't there)
+		if info.name != "" && info.price == nil && info.priceInCart {
+			result.PriceInCart = true
+			log.Printf("LookupWish: price only in cart on %s, skipping AI", u.Host)
+		} else if !hasPriceText(info.excerpt) {
 			log.Printf("LookupWish: no price text on %s, skipping AI", u.Host)
 		} else if ai, err := lookupWithAI(c.Request.Context(), h.DB, user_id, u.String(), info.excerpt); err != nil {
 			hit_limit = hit_limit || errors.Is(err, errAIQuota)
@@ -329,6 +335,7 @@ type productInfo struct {
 	currency     string
 	excerpt      string // text for the AI fallback
 	onlySiteName bool   // every name candidate on the page was just the shop's name
+	priceInCart  bool   // the page says the price is only shown in the cart
 }
 
 // extractProductInfo reads structured product data (JSON-LD, price meta tags, microdata), picks the best
@@ -348,6 +355,7 @@ func extractProductInfo(page *productPage, hosts []string) productInfo {
 		meta_price, meta_curr  string
 		item_price, item_curr  string
 		price_hints            []string
+		main_price             string // Amazon's buy-box price ("priceToPay", corePrice…)
 		text                   strings.Builder
 	)
 	var walk func(n *html.Node, chrome bool)
@@ -367,9 +375,16 @@ func extractProductInfo(page *productPage, hosts []string) productInfo {
 			if attr(n, "id") == "productTitle" && product_title == "" {
 				product_title = nodeText(n)
 			}
-			// Short texts in price-ish elements help the AI find the price on pages without product data
-			if len(price_hints) < 12 && !chrome && strings.Contains(strings.ToLower(attr(n, "class")+" "+attr(n, "id")), "price") {
-				if t := nodeText(n); t != "" && len(t) <= 40 && strings.ContainsAny(t, "0123456789") && !containsString(price_hints, t) {
+			// Amazon has no structured price, but its buy-box price sits in known elements: read it directly
+			if main_price == "" && !chrome && isMainPriceElement(n) {
+				if t := firstNonEmpty(offscreenText(n), undouble(nodeText(n))); len(t) <= 40 && hasPriceText(t) {
+					main_price = t
+				}
+			}
+			// Short texts in price-ish elements help the AI find the price on pages without product data.
+			// Kept clean: doubled texts halved ("119,95€119,95€"), fragments ("119,", "95") and repeats dropped.
+			if len(price_hints) < 8 && !chrome && strings.Contains(strings.ToLower(attr(n, "class")+" "+attr(n, "id")), "price") {
+				if t := undouble(nodeText(n)); t != "" && len(t) <= 40 && hasPriceText(t) && !containsString(price_hints, t) {
 					price_hints = append(price_hints, t)
 				}
 			}
@@ -389,6 +404,13 @@ func extractProductInfo(page *productPage, hosts []string) productInfo {
 				return
 			case "nav", "header", "footer", "aside":
 				chrome = true // site navigation: keep its data, leave its text out of the excerpt
+			}
+			// "Similar products" / recommendation carousels: other products' names and prices must not
+			// reach the excerpt or the price hints
+			if !chrome && isRecommendationBlock(n) {
+				chrome = true
+			}
+			switch n.Data {
 			case "title":
 				if title == "" {
 					title = nodeText(n)
@@ -433,12 +455,15 @@ func extractProductInfo(page *productPage, hosts []string) productInfo {
 		}
 	}
 	walk(doc, false)
+	info.priceInCart = priceOnlyInCart(page.body)
 
 	if info.price == nil {
 		if p := parsePrice(meta_price); p != nil {
 			info.price, info.currency = p, meta_curr
 		} else if p := parsePrice(item_price); p != nil {
 			info.price, info.currency = p, item_curr
+		} else if p := parsePrice(main_price); p != nil {
+			info.price, info.currency = p, currencyFromText(main_price, page.finalHost)
 		}
 	}
 	info.currency = normalizeCurrency(info.currency)
@@ -470,6 +495,121 @@ func extractProductInfo(page *productPage, hosts []string) productInfo {
 		"\n\n" + text.String()
 	info.excerpt = truncateRunes(excerpt, lookupExcerptChars)
 	return info
+}
+
+// Amazon/marketplace recommendation areas (class or id): "a-carousel", "p13n-…", "similarities", "sponsored"…
+var recommendationMarkers = []string{"carousel", "p13n", "recommend", "similar", "sponsored", "related-products", "also-bought", "also-viewed"}
+
+func isRecommendationBlock(n *html.Node) bool {
+	v := strings.ToLower(attr(n, "class") + " " + attr(n, "id"))
+	for _, m := range recommendationMarkers {
+		if strings.Contains(v, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// Shops (Amazon for some brands) that only reveal the price in the cart say so on the page
+var priceInCartMarkers = []string{
+	"lege diesen artikel in deinen einkaufswagen", "preis im einkaufswagen",
+	"add this item to your cart", "see price in cart", "price in cart",
+	"aggiungi questo articolo al carrello", "prezzo nel carrello",
+	"ajoutez cet article à votre panier", "prix dans le panier",
+}
+
+func priceOnlyInCart(body []byte) bool {
+	low := strings.ToLower(string(body))
+	for _, m := range priceInCartMarkers {
+		if strings.Contains(low, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// Amazon's buy-box price elements (desktop and mobile layouts)
+var mainPriceIDs = map[string]bool{
+	"corePrice_feature_div": true, "corePriceDisplay_desktop_feature_div": true, "corePrice_desktop": true,
+	"corePrice_mobile_feature_div": true, "apex_desktop": true, "apex_offerDisplay_desktop": true,
+	"priceblock_ourprice": true, "priceblock_dealprice": true, "priceblock_saleprice": true,
+	"price_inside_buybox": true, "newBuyBoxPrice": true, "tp_price_block_total_price_ww": true,
+}
+
+func isMainPriceElement(n *html.Node) bool {
+	if mainPriceIDs[attr(n, "id")] {
+		return true
+	}
+	class := attr(n, "class")
+	return strings.Contains(class, "priceToPay") || strings.Contains(class, "apexPriceToPay")
+}
+
+// offscreenText returns the first "a-offscreen" text inside n: Amazon's clean, screen-reader price ("119,95€")
+func offscreenText(n *html.Node) string {
+	var found string
+	var walk func(*html.Node)
+	walk = func(m *html.Node) {
+		if found != "" {
+			return
+		}
+		if m.Type == html.ElementNode && strings.Contains(attr(m, "class"), "a-offscreen") {
+			if t := nodeText(m); hasPriceText(t) {
+				found = t
+				return
+			}
+		}
+		for ch := m.FirstChild; ch != nil; ch = ch.NextSibling {
+			walk(ch)
+		}
+	}
+	walk(n)
+	return found
+}
+
+// undouble halves texts that repeat themselves, as Amazon's visible + screen-reader prices do ("119,95€119,95€")
+func undouble(s string) string {
+	s = strings.TrimSpace(s)
+	r := []rune(s)
+	if len(r) >= 2 && len(r)%2 == 0 && string(r[:len(r)/2]) == string(r[len(r)/2:]) {
+		return string(r[:len(r)/2])
+	}
+	if half := strings.Fields(s); len(half) >= 2 && len(half)%2 == 0 &&
+		strings.Join(half[:len(half)/2], " ") == strings.Join(half[len(half)/2:], " ") {
+		return strings.Join(half[:len(half)/2], " ")
+	}
+	return s
+}
+
+// currencyFromText reads the currency of a price text; "$" depends on the shop's country
+func currencyFromText(s, host string) string {
+	up := strings.ToUpper(s)
+	for code := range map[string]bool{"EUR": true, "GBP": true, "CHF": true, "USD": true, "CAD": true, "AUD": true, "SEK": true, "PLN": true, "JPY": true} {
+		if strings.Contains(up, code) {
+			return code
+		}
+	}
+	switch {
+	case strings.Contains(s, "€"):
+		return "EUR"
+	case strings.Contains(s, "£"):
+		return "GBP"
+	case strings.Contains(s, "¥"):
+		return "JPY"
+	case strings.Contains(s, "₹"):
+		return "INR"
+	case strings.Contains(s, "$"):
+		host = strings.ToLower(host)
+		switch {
+		case strings.HasSuffix(host, ".ca"):
+			return "CAD"
+		case strings.HasSuffix(host, ".com.au"):
+			return "AUD"
+		case strings.HasSuffix(host, ".com.mx"):
+			return "MXN"
+		}
+		return "USD"
+	}
+	return ""
 }
 
 // cleanTitle drops the shop's name from a page title and keeps the first remaining part, which is the
@@ -747,6 +887,7 @@ func lookupWithAI(ctx context.Context, d *sql.DB, userID int, pageURL, excerpt s
 	if err := callOpenAIJSON(ctx, d, userID, "product", lookupSchema, lookupPrompt+"\n\nPAGE URL: "+pageURL+"\n\nPAGE TEXT:\n"+excerpt, &out); err != nil {
 		return productInfo{}, err
 	}
+	log.Printf("LookupWish: AI answer for %s: name=%q price=%v currency=%q", hostOf(pageURL), deref(out.Name), derefNum(out.Price), deref(out.Currency))
 	var info productInfo
 	if out.Name != nil {
 		info.name = *out.Name
@@ -805,6 +946,27 @@ func cutAtWord(s string, n int) string {
 	return strings.TrimRight(string(cut), " ,;:/|-–(")
 }
 
+func hostOf(raw string) string {
+	if u, err := url.Parse(raw); err == nil {
+		return u.Host
+	}
+	return ""
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func derefNum(f *float64) any {
+	if f == nil {
+		return nil
+	}
+	return *f
+}
+
 func attr(n *html.Node, key string) string {
 	for _, a := range n.Attr {
 		if strings.EqualFold(a.Key, key) {
@@ -818,6 +980,9 @@ func nodeText(n *html.Node) string {
 	var b strings.Builder
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "style" || n.Data == "noscript") {
+			return // Amazon puts CSS inside its price blocks
+		}
 		if n.Type == html.TextNode {
 			b.WriteString(n.Data)
 		}

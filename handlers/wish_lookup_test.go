@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -451,4 +452,84 @@ func TestLookupWishShortensLongNames(t *testing.T) {
 func strconvQuote(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+func TestCurrencyFromText(t *testing.T) {
+	cases := []struct{ text, host, want string }{
+		{"119,95€", "www.amazon.de", "EUR"}, {"£35.00", "www.amazon.co.uk", "GBP"}, {"$24.99", "www.amazon.com", "USD"},
+		{"$24.99", "www.amazon.ca", "CAD"}, {"$24.99", "www.amazon.com.au", "AUD"}, {"CHF 49.90", "shop.ch", "CHF"}, {"12,50", "shop.it", ""},
+	}
+	for _, c := range cases {
+		if got := currencyFromText(c.text, c.host); got != c.want {
+			t.Errorf("currencyFromText(%q, %s) = %q, want %q", c.text, c.host, got, c.want)
+		}
+	}
+}
+
+func TestUndouble(t *testing.T) {
+	cases := map[string]string{"119,95€119,95€": "119,95€", "€ 12,50 € 12,50": "€ 12,50", "119,95€": "119,95€", "aa": "a", "abc": "abc"}
+	for in, want := range cases {
+		if got := undouble(in); got != want {
+			t.Errorf("undouble(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Amazon page for a product whose price is only shown in the cart, surrounded by carousels of other products
+const amazonPriceInCartPage = `<html><head><title>Amazon.de: Pressure Cooker 6L : Amazon.de: Küche</title></head><body>
+<h1 id="title"><span id="productTitle">Pressure Cooker 6L Mokka</span></h1>
+<div id="corePriceDisplay_desktop_feature_div"><style>.savingPriceOverride { font-weight: 300!important; }</style></div>
+<div id="buybox">Um Produktdetails zu sehen, lege diesen Artikel in deinen Einkaufswagen.</div>
+<div class="a-carousel-container"><div class="p13n-sc-uncoverable-faceout"><span class="a-price"><span class="a-offscreen">119,95€</span><span aria-hidden="true">119,95€</span></span></div></div>
+<div id="sims-consolidated-2_feature_div" class="similarities"><span class="a-price"><span class="a-offscreen">89,90€</span></span></div>
+</body></html>`
+
+func TestExtractAmazonPriceInCart(t *testing.T) {
+	info := extractProductInfo(&productPage{body: []byte(amazonPriceInCartPage), finalHost: "www.amazon.de"}, []string{"amzn.eu", "www.amazon.de"})
+	if info.name != "Pressure Cooker 6L Mokka" || info.price != nil || !info.priceInCart {
+		t.Errorf("got name %q, price %v, priceInCart %v", info.name, info.price, info.priceInCart)
+	}
+	if strings.Contains(info.excerpt, "119,95") || strings.Contains(info.excerpt, "89,90") || strings.Contains(info.excerpt, "font-weight") {
+		t.Error("carousel prices or CSS leaked into the AI excerpt")
+	}
+}
+
+// Normal Amazon page: the buy-box price is read directly (no AI), ignoring CSS and the carousel
+func TestExtractAmazonBuyBoxPrice(t *testing.T) {
+	page := `<html><body><h1><span id="productTitle">Desk Lamp</span></h1>
+<div class="a-carousel"><span class="a-price"><span class="a-offscreen">9,99€</span></span></div>
+<div id="corePriceDisplay_desktop_feature_div"><style>.x { width: 300px }</style>
+<span class="a-price priceToPay"><span class="a-offscreen">89,99€</span><span aria-hidden="true">89,99€</span></span></div>
+</body></html>`
+	info := extractProductInfo(&productPage{body: []byte(page), finalHost: "www.amazon.de"}, []string{"www.amazon.de"})
+	if info.name != "Desk Lamp" || info.price == nil || *info.price != 89.99 || info.currency != "EUR" {
+		got := "nil"
+		if info.price != nil {
+			got = fmt.Sprint(*info.price)
+		}
+		t.Errorf("got name %q price %s currency %q, want Desk Lamp 89.99 EUR", info.name, got, info.currency)
+	}
+}
+
+func TestLookupWishPriceInCartSkipsAI(t *testing.T) {
+	allowPrivateLookups = true
+	defer func() { allowPrivateLookups = false }()
+	resetLookupCache()
+	shop := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, amazonPriceInCartPage)
+	}))
+	defer shop.Close()
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	aiCalls := 0
+	ai := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { aiCalls++ }))
+	defer ai.Close()
+	old := openaiEndpoint
+	openaiEndpoint = ai.URL
+	defer func() { openaiEndpoint = old }()
+
+	res := doLookup(lookupRouter(), shop.URL+"/dp/B0GHS29BYQ")
+	if res.Status != lookupOK || res.Name != "Pressure Cooker 6L Mokka" || res.Price != nil || !res.PriceInCart || aiCalls != 0 {
+		t.Errorf("got %+v, AI calls %d; want the name, no price, price_in_cart, no AI", res, aiCalls)
+	}
 }
