@@ -9,7 +9,7 @@ A full-featured expense sharing and personal finance backend built with Go, Gin,
 - **Expense Payments** — Partial repayments toward specific expenses
 - **GopherStash** — Personal expense tracker with categories and spending summaries
 - **GoWish** — Wishlist of things to buy (name, why, link, cost), personal or in shared wish groups (separate from debt groups)
-- **Receipt Scanning** — AI-powered receipt parsing via Google Gemini
+- **Receipt Scanning** — AI-powered receipt parsing via OpenAI (default model `gpt-6-luna`)
 - **Currency Conversion** — Live exchange rates and historical trend data
 - **Suggestion Box** — Feature suggestions with voting, comments, and status tracking
 - **Access Control** — Email whitelist/blacklist managed by the founder
@@ -38,7 +38,8 @@ go build -o gopherdebt .
 | `DB_PASSWORD` | Yes* | — | Supabase DB password (*required if `DATABASE_URL` is not set) |
 | `JWT_SECRET` | Yes | — | Secret key for JWT token signing (server refuses to start without it) |
 | `PORT` | No | `8080` | Server port |
-| `GEMINI_API_KEY` | No | — | Google Gemini API key for receipt scanning |
+| `OPENAI_API_KEY` | No | — | OpenAI API key for receipt scanning (without it, the app uses on-device OCR) |
+| `OPENAI_RECEIPT_MODEL` | No | `gpt-6-luna` | OpenAI model that reads receipts |
 
 ## API Endpoints
 
@@ -145,7 +146,7 @@ go build -o gopherdebt .
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/receipt/scan` | Upload receipt image (max 14 MB) → AI extracts items & total |
-| GET | `/api/receipt/config` | Whether AI scanning is available (`GEMINI_API_KEY` set) |
+| GET | `/api/receipt/config` | Whether AI scanning is available (`OPENAI_API_KEY` set) |
 
 ### GopherStash — Personal Expense Tracker (Protected)
 
@@ -312,7 +313,7 @@ Content-Type: multipart/form-data
 
 image: <receipt image file>
 ```
-Max 14 MB (413 if larger), so the base64 request stays under Gemini's 20 MB inline-request limit. The file must be an image (415 otherwise). At most 2 scans run at once (429 if busy).
+Max 14 MB (413 if larger), to keep server memory bounded. JPEG, PNG, WEBP or GIF only (415 otherwise). At most 2 scans run at once (429 if busy).
 
 ## Project Structure
 
@@ -348,12 +349,12 @@ Max 14 MB (413 if larger), so the base64 request stays under Gemini's 20 MB inli
 │   ├── wish.go            # GoWish personal endpoints
 │   ├── wish_lists.go      # GoWish shared group endpoints
 │   ├── access_control.go  # Whitelist/blacklist (founder only)
-│   ├── receipt.go         # AI receipt scanning via Gemini
+│   ├── receipt.go         # AI receipt scanning via OpenAI
 │   ├── handlers_test.go   # Handler tests
 │   ├── stash_test.go      # GopherStash tests
 │   ├── wish_test.go       # GoWish tests
 │   ├── wish_lists_test.go # GoWish shared group tests
-│   └── receipt_test.go    # Receipt scan limits + Gemini request (fake server)
+│   └── receipt_test.go    # Receipt scan limits + OpenAI request/errors (fake server)
 ├── middleware/
 │   ├── auth.go            # JWT authentication
 │   ├── active_user.go     # Rejects deleted/blacklisted accounts, outdated tokens

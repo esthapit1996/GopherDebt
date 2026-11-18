@@ -15,7 +15,7 @@ This document explains how the Go backend is structured and how all the pieces f
 | **database/sql** | stdlib | Database interface |
 | **sync** | stdlib | Thread-safe caching (rate limiter, currency cache) |
 | **encoding/json** | stdlib | Parse JSON from external APIs |
-| **encoding/base64** | stdlib | Encode receipt images for Gemini API |
+| **encoding/base64** | stdlib | Encode receipt images for the OpenAI API |
 
 ---
 
@@ -59,7 +59,7 @@ GopherDebt/
 │   ├── wish.go          # GoWish personal endpoints
 │   ├── wish_lists.go    # GoWish shared group endpoints
 │   ├── access_control.go # Whitelist/blacklist (founder only)
-│   └── receipt.go       # AI receipt scanning (Gemini proxy)
+│   └── receipt.go       # AI receipt scanning (OpenAI, key server-side)
 ├── middleware/          # Request processing
 │   ├── middleware_readme.md # 📖 Documentation
 │   ├── auth.go          # JWT authentication
