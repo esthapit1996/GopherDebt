@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -204,37 +205,56 @@ func (h *WishHandler) LookupWish(c *gin.Context) {
 		return
 	}
 
-	info := extractProductInfo(page)
+	// The shop's name is judged against both the pasted host and the one the page came from
+	// (short links like amzn.eu redirect to amazon.de)
+	hosts := []string{u.Hostname(), page.finalHost}
+	info := extractProductInfo(page, hosts)
+	// A page whose only "name" is the shop itself (e.g. "Amazon") isn't a product
+	saw_site_name := info.onlySiteName
 	result := wishLookupResult{Status: lookupOK, Name: info.name, Price: info.price, Currency: info.currency, Source: "page"}
 
 	if info.name == "" || info.price == nil {
-		if looksBlocked(page) && info.name == "" {
+		// Bot walls can be served with status 200 and still carry a title; check before trusting anything,
+		// and don't spend AI tokens on them
+		if looksBlocked(page) {
 			c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: wishLookupResult{Status: lookupBlocked}})
 			return
 		}
 		if ai, err := lookupWithAI(c.Request.Context(), u.String(), info.excerpt); err != nil {
 			log.Printf("LookupWish: AI fallback for %s: %v", u.Host, err)
-		} else if ai.name != "" || ai.price != nil {
-			if result.Name == "" {
-				result.Name = ai.name
+		} else {
+			if isSiteNameAny(ai.name, hosts) {
+				saw_site_name, ai.name = true, ""
 			}
-			if result.Price == nil {
-				result.Price, result.Currency = ai.price, ai.currency
+			if ai.name != "" || ai.price != nil {
+				// The AI's short name beats a page title too long for the 64-character field (Amazon)
+				if ai.name != "" && (result.Name == "" || utf8.RuneCountInString(result.Name) > 64) {
+					result.Name = ai.name
+				}
+				if result.Price == nil {
+					result.Price, result.Currency = ai.price, ai.currency
+				}
+				result.Source = "ai"
 			}
-			result.Source = "ai"
 		}
 	}
 
 	result.Name = truncateRunes(strings.TrimSpace(result.Name), 64)
 	if result.Name == "" && result.Price == nil {
-		c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: wishLookupResult{Status: lookupNotFound}})
+		status := lookupNotFound
+		if saw_site_name {
+			// All we could see was the shop's own name: it showed us a generic or bot page instead of the product
+			status = lookupBlocked
+		}
+		c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: wishLookupResult{Status: status}})
 		return
 	}
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: result})
 }
 
 type productPage struct {
-	body []byte
+	body      []byte
+	finalHost string // host after redirects
 }
 
 // fetchProductPage loads the page, or returns a lookup status explaining why it couldn't
@@ -271,50 +291,65 @@ func fetchProductPage(ctx context.Context, u *url.URL) (*productPage, string) {
 	if err != nil {
 		return nil, lookupUnreachable
 	}
-	return &productPage{body: body}, ""
+	return &productPage{body: body, finalHost: resp.Request.URL.Hostname()}, ""
 }
 
 type productInfo struct {
-	name     string
-	price    *float64
-	currency string
-	excerpt  string // visible text for the AI fallback
+	name         string
+	price        *float64
+	currency     string
+	excerpt      string // text for the AI fallback
+	onlySiteName bool   // every name candidate on the page was just the shop's name
 }
 
-// extractProductInfo reads JSON-LD Product data and price meta tags; it also collects a text excerpt
-func extractProductInfo(page *productPage) productInfo {
+// extractProductInfo reads structured product data (JSON-LD, price meta tags, microdata), picks the best
+// product name, and builds a text excerpt for the AI fallback. hosts are the pasted and final hostnames.
+func extractProductInfo(page *productPage, hosts []string) productInfo {
 	doc, err := html.Parse(bytes.NewReader(page.body))
 	if err != nil {
 		return productInfo{}
 	}
 	var (
-		info                productInfo
-		title, h1           string
-		metaTitle, metaDesc string
-		metaPrice, metaCurr string
-		itemPrice, itemCurr string
-		text                strings.Builder
+		info                   productInfo
+		ld_name                string
+		title, meta_title_name string // <title>, <meta name="title"> (Amazon)
+		og_title, meta_desc    string
+		product_title          string // id="productTitle" (Amazon and clones)
+		h1s                    []string
+		meta_price, meta_curr  string
+		item_price, item_curr  string
+		price_hints            []string
+		text                   strings.Builder
 	)
-	var walk func(n *html.Node)
-	walk = func(n *html.Node) {
+	var walk func(n *html.Node, chrome bool)
+	walk = func(n *html.Node, chrome bool) {
 		if n.Type == html.ElementNode {
 			// schema.org microdata can sit on any element: <span itemprop="price" content="120.00">
 			switch strings.ToLower(attr(n, "itemprop")) {
 			case "price":
-				if itemPrice == "" {
-					itemPrice = firstNonEmpty(attr(n, "content"), nodeText(n))
+				if item_price == "" {
+					item_price = firstNonEmpty(attr(n, "content"), nodeText(n))
 				}
 			case "pricecurrency":
-				if itemCurr == "" {
-					itemCurr = firstNonEmpty(attr(n, "content"), nodeText(n))
+				if item_curr == "" {
+					item_curr = firstNonEmpty(attr(n, "content"), nodeText(n))
+				}
+			}
+			if attr(n, "id") == "productTitle" && product_title == "" {
+				product_title = nodeText(n)
+			}
+			// Short texts in price-ish elements help the AI find the price on pages without product data
+			if len(price_hints) < 12 && !chrome && strings.Contains(strings.ToLower(attr(n, "class")+" "+attr(n, "id")), "price") {
+				if t := nodeText(n); t != "" && len(t) <= 40 && strings.ContainsAny(t, "0123456789") && !containsString(price_hints, t) {
+					price_hints = append(price_hints, t)
 				}
 			}
 			switch n.Data {
 			case "script":
-				if strings.Contains(strings.ToLower(attr(n, "type")), "ld+json") && n.FirstChild != nil && (info.name == "" || info.price == nil) {
+				if strings.Contains(strings.ToLower(attr(n, "type")), "ld+json") && n.FirstChild != nil && (ld_name == "" || info.price == nil) {
 					name, price, curr := productFromJSONLD(n.FirstChild.Data)
-					if info.name == "" {
-						info.name = name
+					if ld_name == "" {
+						ld_name = name
 					}
 					if info.price == nil && price != nil {
 						info.price, info.currency = price, curr
@@ -323,60 +358,126 @@ func extractProductInfo(page *productPage) productInfo {
 				return
 			case "style", "noscript", "svg", "template", "iframe":
 				return
+			case "nav", "header", "footer", "aside":
+				chrome = true // site navigation: keep its data, leave its text out of the excerpt
 			case "title":
 				if title == "" {
 					title = nodeText(n)
 				}
 			case "h1":
-				if h1 == "" {
-					h1 = nodeText(n)
+				if len(h1s) < 5 {
+					if t := nodeText(n); t != "" {
+						h1s = append(h1s, t)
+					}
 				}
 			case "meta":
 				key := strings.ToLower(attr(n, "property") + attr(n, "name") + attr(n, "itemprop"))
 				content := attr(n, "content")
 				switch key {
 				case "og:title", "twitter:title":
-					if metaTitle == "" {
-						metaTitle = content
+					if og_title == "" {
+						og_title = content
+					}
+				case "title":
+					if meta_title_name == "" {
+						meta_title_name = content
 					}
 				case "description", "og:description":
-					if metaDesc == "" {
-						metaDesc = content
+					if meta_desc == "" {
+						meta_desc = content
 					}
 				case "product:price:amount", "og:price:amount":
-					metaPrice = content
+					meta_price = content
 				case "product:price:currency", "og:price:currency":
-					metaCurr = content
+					meta_curr = content
 				}
 			}
 		}
-		if n.Type == html.TextNode && text.Len() < lookupExcerptChars {
+		if n.Type == html.TextNode && !chrome && text.Len() < lookupExcerptChars {
 			if s := strings.Join(strings.Fields(n.Data), " "); s != "" {
 				text.WriteString(s)
 				text.WriteString("\n")
 			}
 		}
 		for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
-			walk(ch)
+			walk(ch, chrome)
 		}
 	}
-	walk(doc)
+	walk(doc, false)
 
 	if info.price == nil {
-		if p := parsePrice(metaPrice); p != nil {
-			info.price, info.currency = p, metaCurr
-		} else if p := parsePrice(itemPrice); p != nil {
-			info.price, info.currency = p, itemCurr
+		if p := parsePrice(meta_price); p != nil {
+			info.price, info.currency = p, meta_curr
+		} else if p := parsePrice(item_price); p != nil {
+			info.price, info.currency = p, item_curr
 		}
-	}
-	if info.name == "" {
-		info.name = firstNonEmpty(metaTitle, h1)
 	}
 	info.currency = normalizeCurrency(info.currency)
 
-	excerpt := "TITLE: " + firstNonEmpty(metaTitle, title) + "\nDESCRIPTION: " + metaDesc + "\nHEADING: " + h1 + "\n\n" + text.String()
+	// Name: the first candidate that isn't just the shop's own name
+	page_title := cleanTitle(firstNonEmpty(meta_title_name, title), hosts)
+	candidates := append([]string{ld_name, cleanTitle(og_title, hosts), product_title}, h1s...)
+	candidates = append(candidates, page_title)
+	saw_site_name := false
+	for _, c := range candidates {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if isSiteNameAny(c, hosts) {
+			saw_site_name = true
+			continue
+		}
+		info.name = c
+		break
+	}
+	info.onlySiteName = info.name == "" && saw_site_name
+
+	excerpt := "TITLE: " + firstNonEmpty(cleanTitle(og_title, hosts), page_title) +
+		"\nPRODUCT TITLE: " + product_title +
+		"\nDESCRIPTION: " + meta_desc +
+		"\nHEADINGS: " + strings.Join(h1s, " | ") +
+		"\nPRICE TEXT: " + strings.Join(price_hints, " | ") +
+		"\n\n" + text.String()
 	info.excerpt = truncateRunes(excerpt, lookupExcerptChars)
 	return info
+}
+
+// cleanTitle drops the shop's name from a page title and keeps the first remaining part, which is the
+// product in the usual layouts: "Amazon.de: Pressure Cooker : Amazon.de: Küche" → "Pressure Cooker",
+// "Desk Lamp | IKEA" → "Desk Lamp", "Running Shoes - Men - Shop" → "Running Shoes".
+func cleanTitle(t string, hosts []string) string {
+	t = strings.TrimSpace(t)
+	if t == "" {
+		return ""
+	}
+	for _, p := range titleSeparators.Split(t, -1) {
+		if p = strings.TrimSpace(p); p != "" && !isSiteNameAny(p, hosts) {
+			return p
+		}
+	}
+	return t // only the shop's name: let the caller recognise it
+}
+
+// "X | Shop", "X - Shop", "X – Shop", "Shop: X"
+var titleSeparators = regexp.MustCompile(`\s+[|\-–—]\s+|\s*:\s+`)
+
+func isSiteNameAny(name string, hosts []string) bool {
+	for _, h := range hosts {
+		if h != "" && isSiteName(name, h) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // productFromJSONLD finds a schema.org Product (also inside @graph / arrays) and its offer price
@@ -512,9 +613,35 @@ func normalizeCurrency(c string) string {
 // looksBlocked spots bot walls served with status 200 (captchas, "enable JavaScript" shells)
 func looksBlocked(page *productPage) bool {
 	head := strings.ToLower(string(page.body[:min(len(page.body), 200<<10)]))
-	for _, marker := range []string{"captcha", "robot check", "are you a human", "are you a robot", "access denied",
-		"cf-chl", "challenge-platform", "unusual traffic", "please enable javascript", "enable cookies"} {
+	for _, marker := range []string{"captcha", "robot check", "are you a human", "are you a robot", "not a robot",
+		"access denied", "automated access", "cf-chl", "challenge-platform", "unusual traffic",
+		"please enable javascript", "enable cookies", "continue shopping", "opfcaptcha"} {
 		if strings.Contains(head, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSiteName reports whether name is just the shop's own name, e.g. "Amazon" or "Amazon.it" for www.amazon.it
+func isSiteName(name, host string) bool {
+	norm := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+				return r
+			}
+			return -1
+		}, strings.ToLower(s))
+	}
+	n := norm(name)
+	if n == "" {
+		return false
+	}
+	// The shop's name is a part of the domain other than the ending ("amazon", also in smile.amazon.de),
+	// or the domain from that part on ("amazon.it", "amazon.co.uk"), ignoring punctuation
+	labels := strings.Split(strings.ToLower(host), ".")
+	for i := 0; i < len(labels)-1; i++ {
+		if n == norm(labels[i]) || n == norm(strings.Join(labels[i:], ".")) {
 			return true
 		}
 	}
