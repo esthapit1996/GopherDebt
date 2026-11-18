@@ -209,7 +209,7 @@ func main() {
 		api.GET("/currency/convert", currencyHandler.Convert)
 		api.GET("/currency/history", currencyHandler.GetHistory)
 
-		// Receipt scanning (Gemini proxy)
+		// Receipt scanning (OpenAI, key stays server-side)
 		api.POST("/receipt/scan", receiptHandler.ScanReceipt)
 		// Config for receipt scanning (frontend can check if AI scanning is available)
 		api.GET("/receipt/config", receiptHandler.ReceiptConfig)

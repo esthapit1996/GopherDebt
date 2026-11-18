@@ -382,26 +382,31 @@ type ReceiptHandler struct{}  // No DB needed — uses external API only
 | Method | Endpoint | Function | Description |
 |--------|----------|----------|-------------|
 | POST | `/api/receipt/scan` | `ScanReceipt` | Upload receipt image → AI extracts items & total |
-| GET | `/api/receipt/config` | `ReceiptConfig` | Whether `GEMINI_API_KEY` is set |
+| GET | `/api/receipt/config` | `ReceiptConfig` | Whether `OPENAI_API_KEY` is set |
 
 ### How It Works
 
 ```
 1. Reject bodies over 14 MB (`MaxReceiptBytes`) with 413: up front via Content-Length,
-   and while reading via http.MaxBytesReader. 14 MB is the largest image whose base64 request
-   (plus prompt) stays under Gemini's 20 MB inline-request limit (`GeminiMaxRequestBytes`);
-   `TestMaxReceiptFitsGemini` enforces this
+   and while reading via http.MaxBytesReader. The cap keeps memory bounded on the 256 MB VM
+   (OpenAI itself accepts far more); the frontend shrinks photos over 4 MB before uploading
 2. Take one of 2 scan slots (`receiptScanSlots`), else 429 "busy"
 3. Read the "image" file (above 8 MB it spills to a temp file, see MaxMultipartMemory in main.go)
-4. Sniff the real type (http.DetectContentType); non-images get 415. HEIC/HEIF are allowed by
-   their declared type because Go can't sniff them
-5. Stream the image as base64 straight into the Gemini JSON body (one encoded copy in memory)
-6. Send to Google Gemini API (gemini-2.5-flash), 60 s timeout, cancelled if the client goes away
-7. Gemini extracts: store_name, items (name + price), total
-8. Return structured JSON to frontend
+4. Sniff the real type (http.DetectContentType). Only JPEG, PNG, WEBP and GIF are accepted (what
+   OpenAI reads); anything else, including HEIC, gets 415. The frontend converts HEIC to JPEG first
+5. Stream the image as a base64 data URL straight into the JSON body (one encoded copy in memory)
+6. POST to the OpenAI Responses API (`/v1/responses`). The model is `OPENAI_RECEIPT_MODEL` or
+   `gpt-6-luna`, image detail is "high", and the key goes in the `Authorization` header, never the
+   URL. 60 s timeout, cancelled if the client goes away
+7. Structured Outputs (`text.format` json_schema, strict) forces the answer into
+   `{store_name, items[{name, price}], total}`
+8. Return that JSON text to the frontend as `{"text": ...}`
+
+OpenAI errors: 429 (rate/quota) → 429, so the frontend falls back to on-device OCR. Other errors → 502.
+A model refusal → 422. An empty answer → 500.
 ```
 
 **Memory:** a max-size (14 MB) scan peaks at about 46 MB of heap, so 2 concurrent scans fit comfortably in the 256 MB VM. (Before this change, a 40 MB upload peaked at about 253 MB.)
 
-- Receipts in any language are supported (Gemini translates item names to English)
-- Requires `GEMINI_API_KEY` environment variable
+- Receipts in any language are supported (the model translates item names to English)
+- Requires the `OPENAI_API_KEY` environment variable; `OPENAI_RECEIPT_MODEL` optionally overrides the model
