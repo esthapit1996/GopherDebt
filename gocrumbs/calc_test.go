@@ -305,3 +305,26 @@ func TestCalculateProperties(t *testing.T) {
 		}
 	}
 }
+
+// A Werkstudent pays no care or health insurance, so the notes about the care insurance
+// surcharge and the KV ceiling must not appear.
+func TestCalculateWerkstudentNotes(t *testing.T) {
+	in := base(7000) // above the KV ceiling (5,812.50) but below the RV ceiling (8,450)
+	in.WorkType = WorkWerkstudent
+	got, _ := Calculate(in)
+	for _, code := range []string{NoteChildlessSurcharge, NoteBBGCapped} {
+		if slices.Contains(got.Notes, code) {
+			t.Errorf("werkstudent notes %v must not contain %s", got.Notes, code)
+		}
+	}
+	if !slices.Contains(got.Notes, NoteWerkstudentRVOnly) {
+		t.Errorf("werkstudent notes %v lack %s", got.Notes, NoteWerkstudentRVOnly)
+	}
+
+	// Above the RV ceiling the pension contribution really is capped
+	in.GrossMain = 9000
+	got, _ = Calculate(in)
+	if !slices.Contains(got.Notes, NoteBBGCapped) {
+		t.Errorf("werkstudent at 9,000: notes %v lack %s", got.Notes, NoteBBGCapped)
+	}
+}
