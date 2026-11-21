@@ -14,7 +14,7 @@ const (
 )
 
 const goCrumbsColumns = `work_type, gross_amount, gross_period, side_gross, steuerklasse, church_tax,
-	bundesland, children, under_23, zusatzbeitrag, rent, savings, updated_at`
+	bundesland, children, under_23, zusatzbeitrag, rent, savings, ws_hourly_wage, ws_hours, ws_hours_period, updated_at`
 
 // GetGoCrumbsProfile returns the user's saved profile, or ErrNotFound if none was saved yet
 func GetGoCrumbsProfile(d *sql.DB, userID int) (*models.GoCrumbsProfile, error) {
@@ -23,7 +23,8 @@ func GetGoCrumbsProfile(d *sql.DB, userID int) (*models.GoCrumbsProfile, error) 
 		err := d.QueryRow(
 			`SELECT `+goCrumbsColumns+` FROM gocrumbs_profiles WHERE user_id = $1`, userID,
 		).Scan(&p.WorkType, &p.GrossAmount, &p.GrossPeriod, &p.SideGross, &p.SteuerKlasse, &p.ChurchTax,
-			&p.Bundesland, &p.Children, &p.Under23, &p.Zusatzbeitrag, &p.Rent, &p.Savings, &p.UpdatedAt)
+			&p.Bundesland, &p.Children, &p.Under23, &p.Zusatzbeitrag, &p.Rent, &p.Savings,
+			&p.WsHourlyWage, &p.WsHours, &p.WsHoursPeriod, &p.UpdatedAt)
 		if err == sql.ErrNoRows {
 			return nil, ErrNotFound
 		}
@@ -90,13 +91,16 @@ func SaveGoCrumbsProfile(d *sql.DB, userID int, req *models.GoCrumbsRequest) (*m
 
 	_, err = tx.Exec(
 		`INSERT INTO gocrumbs_profiles (user_id, work_type, gross_amount, gross_period, side_gross, steuerklasse,
-			church_tax, bundesland, children, under_23, zusatzbeitrag, rent, savings, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
+			church_tax, bundesland, children, under_23, zusatzbeitrag, rent, savings,
+			ws_hourly_wage, ws_hours, ws_hours_period, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP)
 		 ON CONFLICT (user_id) DO UPDATE SET work_type = $2, gross_amount = $3, gross_period = $4,
 			side_gross = $5, steuerklasse = $6, church_tax = $7, bundesland = $8, children = $9,
-			under_23 = $10, zusatzbeitrag = $11, rent = $12, savings = $13, updated_at = CURRENT_TIMESTAMP`,
+			under_23 = $10, zusatzbeitrag = $11, rent = $12, savings = $13, ws_hourly_wage = $14,
+			ws_hours = $15, ws_hours_period = $16, updated_at = CURRENT_TIMESTAMP`,
 		userID, req.WorkType, req.GrossAmount, req.GrossPeriod, req.SideGross, req.SteuerKlasse,
 		req.ChurchTax, req.Bundesland, req.Children, req.Under23, req.Zusatzbeitrag, req.Rent, req.Savings,
+		req.WsHourlyWage, req.WsHours, req.WsHoursPeriod,
 	)
 	if err != nil {
 		return nil, err

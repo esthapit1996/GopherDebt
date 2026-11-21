@@ -291,11 +291,16 @@ type GoCrumbsExtraPayLine struct {
 
 // GoCrumbsRequest is a GoCrumbs budget profile: the user's inputs, never computed results.
 // Gross amounts are per GrossPeriod ("month" or "year"); everything else is EUR per month.
+// Employee income (gross, side income, extra pay) and Werkstudent income (hourly wage and hours)
+// are separate fields and both are stored; WorkType decides which one counts.
 type GoCrumbsRequest struct {
 	WorkType       string                 `json:"work_type" binding:"required,oneof=fte werkstudent"`
 	GrossAmount    float64                `json:"gross_amount" binding:"gte=0,max=10000000"`
 	GrossPeriod    string                 `json:"gross_period" binding:"required,oneof=month year"`
 	SideGross      float64                `json:"side_gross" binding:"gte=0,max=100000"`
+	WsHourlyWage   float64                `json:"ws_hourly_wage" binding:"gte=0,max=1000"`
+	WsHours        float64                `json:"ws_hours" binding:"gte=0,max=744"`
+	WsHoursPeriod  string                 `json:"ws_hours_period" binding:"omitempty,oneof=week month"`
 	SteuerKlasse   int                    `json:"steuerklasse" binding:"required,min=1,max=6"`
 	ChurchTax      bool                   `json:"church_tax"`
 	Bundesland     string                 `json:"bundesland" binding:"required,oneof=BW BY BE BB HB HH HE MV NI NW RP SL SN ST SH TH"`

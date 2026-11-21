@@ -263,6 +263,11 @@ func RunMigrations(db *sql.DB) error {
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`ALTER TABLE gocrumbs_profiles ENABLE ROW LEVEL SECURITY`,
+		// Werkstudent income lives in its own columns, so switching work type never overwrites the
+		// employee's gross, side income or extra pay (and vice versa)
+		`ALTER TABLE gocrumbs_profiles ADD COLUMN IF NOT EXISTS ws_hourly_wage DECIMAL(8, 2) NOT NULL DEFAULT 0 CHECK (ws_hourly_wage >= 0)`,
+		`ALTER TABLE gocrumbs_profiles ADD COLUMN IF NOT EXISTS ws_hours DECIMAL(7, 2) NOT NULL DEFAULT 0 CHECK (ws_hours >= 0)`,
+		`ALTER TABLE gocrumbs_profiles ADD COLUMN IF NOT EXISTS ws_hours_period VARCHAR(5) NOT NULL DEFAULT 'month' CHECK (ws_hours_period IN ('week', 'month'))`,
 		`CREATE TABLE IF NOT EXISTS gocrumbs_expenses (
 			id SERIAL PRIMARY KEY,
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
