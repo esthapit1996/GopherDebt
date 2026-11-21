@@ -34,13 +34,13 @@ func check(t *testing.T, name string, got Result, w want) {
 // social-insurance arithmetic is shown per case.
 func TestCalculateScenarios(t *testing.T) {
 	t.Run("A: 4,000 class I", func(t *testing.T) {
-		// RV 372.00, AV 52.00, KV 4000*8.45% = 338.00, PV 4000*2.4% = 96.00 (childless).
-		// Lohnsteuer: annual 6,294 EUR -> 524.50/month. Net = 4000 - 858 - 524.50.
+		// RV 372.00, AV 52.00, KV 4000*8.75% = 350.00, PV 4000*2.4% = 96.00 (childless).
+		// Lohnsteuer: annual 6,294 EUR -> 524.50/month. Net = 4000 - 870 - 524.50.
 		got, err := Calculate(base(4000))
 		if err != nil {
 			t.Fatal(err)
 		}
-		check(t, "A", got, want{rv: 372, av: 52, kv: 338, pv: 96, lst: 524.50, net: 2617.50})
+		check(t, "A", got, want{rv: 372, av: 52, kv: 350, pv: 96, lst: 524.50, net: 2605.50})
 		if !slices.Contains(got.Notes, NoteChildlessSurcharge) {
 			t.Errorf("notes %v lack %s", got.Notes, NoteChildlessSurcharge)
 		}
@@ -57,14 +57,14 @@ func TestCalculateScenarios(t *testing.T) {
 
 	t.Run("D: above both ceilings, church tax in Bayern (8%)", func(t *testing.T) {
 		// RV 8450*9.3% = 785.85, AV 8450*1.3% = 109.85,
-		// KV 5812.50*8.45% = 491.15625 -> 491.16, PV 5812.50*2.4% = 139.50.
+		// KV 5812.50*8.75% = 508.59375 -> 508.59, PV 5812.50*2.4% = 139.50.
 		in := base(10000)
 		in.Bundesland = "BY"
 		in.ChurchTax = true
 		got, _ := Calculate(in)
 		// Lohnsteuer 31,593/yr -> 2,632.75; Soli 11.15/month; Kirchensteuer 8% of 2,632.75 = 210.62.
-		check(t, "D", got, want{rv: 785.85, av: 109.85, kv: 491.16, pv: 139.50,
-			lst: 2632.75, soli: 111.49, kist: 210.62, net: 5518.78})
+		check(t, "D", got, want{rv: 785.85, av: 109.85, kv: 508.59, pv: 139.50,
+			lst: 2632.75, soli: 111.49, kist: 210.62, net: 5501.35})
 		if !slices.Contains(got.Notes, NoteBBGCapped) {
 			t.Errorf("notes %v lack %s", got.Notes, NoteBBGCapped)
 		}
@@ -72,12 +72,12 @@ func TestCalculateScenarios(t *testing.T) {
 
 	t.Run("E: class III with 1 child", func(t *testing.T) {
 		// 1 child: no PV surcharge, no discount -> PV 1.8% = 90.00.
-		// RV 465.00, AV 65.00, KV 422.50. Lohnsteuer 4,916/yr -> 409.66.
+		// RV 465.00, AV 65.00, KV 5000*8.75% = 437.50. Lohnsteuer 4,916/yr -> 409.66.
 		in := base(5000)
 		in.SteuerKlasse = 3
 		in.Children = 1
 		got, _ := Calculate(in)
-		check(t, "E", got, want{rv: 465, av: 65, kv: 422.50, pv: 90, lst: 409.66, net: 3547.84})
+		check(t, "E", got, want{rv: 465, av: 65, kv: 437.50, pv: 90, lst: 409.66, net: 3532.84})
 	})
 
 	t.Run("F: Sachsen, 3 children, class IV", func(t *testing.T) {
@@ -87,8 +87,8 @@ func TestCalculateScenarios(t *testing.T) {
 		in.Children = 3
 		in.Bundesland = "SN"
 		got, _ := Calculate(in)
-		// RV 279.00, AV 39.00, KV 253.50. Lohnsteuer 3,576/yr -> 298.00.
-		check(t, "F", got, want{rv: 279, av: 39, kv: 253.50, pv: 54, lst: 298, net: 2076.50})
+		// RV 279.00, AV 39.00, KV 3000*8.75% = 262.50. Lohnsteuer 3,576/yr -> 298.00.
+		check(t, "F", got, want{rv: 279, av: 39, kv: 262.50, pv: 54, lst: 298, net: 2067.50})
 	})
 
 	t.Run("Minijob: no deductions", func(t *testing.T) {
@@ -106,8 +106,8 @@ func TestCalculateScenarios(t *testing.T) {
 
 	t.Run("Midijob for FTE: reduced base for all four branches", func(t *testing.T) {
 		got, _ := Calculate(base(1000))
-		// BE = 854.06: RV 79.43, AV 11.10, KV 72.17, PV 20.50.
-		if !near(got.RV, 79.43) || !near(got.AV, 11.10) || !near(got.KV, 72.17) || !near(got.PV, 20.50) {
+		// BE = 854.06: RV 79.43, AV 11.10, KV 74.73, PV 20.50.
+		if !near(got.RV, 79.43) || !near(got.AV, 11.10) || !near(got.KV, 74.73) || !near(got.PV, 20.50) {
 			t.Errorf("midijob contribs = %v %v %v %v", got.RV, got.AV, got.KV, got.PV)
 		}
 		if !slices.Contains(got.Notes, NoteMidijobReduced) {
@@ -165,13 +165,13 @@ func TestCalculateSideIncome(t *testing.T) {
 	})
 	t.Run("above 603 is a second job in class VI", func(t *testing.T) {
 		// Side 1,000 in class VI: Lohnsteuer 1,341/yr -> 111.75; contributions on
-		// the headroom under the ceilings: RV 93.00, AV 13.00, KV 84.50, PV 24.00.
-		// Side net 673.75 on top of scenario A's net 2,617.50.
+		// the headroom under the ceilings: RV 93.00, AV 13.00, KV 87.50, PV 24.00.
+		// Side net 670.75 on top of scenario A's net 2,605.50.
 		in := base(4000)
 		in.GrossSide = 1000
 		got, _ := Calculate(in)
-		if !near(got.Net, 2617.50+673.75) || !near(got.Lohnsteuer, 524.50+111.75) {
-			t.Errorf("net = %v lst = %v, want 3291.25 / 636.25", got.Net, got.Lohnsteuer)
+		if !near(got.Net, 2605.50+670.75) || !near(got.Lohnsteuer, 524.50+111.75) {
+			t.Errorf("net = %v lst = %v, want 3276.25 / 636.25", got.Net, got.Lohnsteuer)
 		}
 		if !slices.Contains(got.Notes, NoteSideSecondJob) {
 			t.Errorf("notes %v lack %s", got.Notes, NoteSideSecondJob)
@@ -196,15 +196,15 @@ func TestCalculateExpenses(t *testing.T) {
 	in.Subscriptions = []Expense{{Name: "Netflix", Amount: 12.99}, {Name: "Gym", Amount: 29.90}}
 	in.Custom = []Expense{{Name: "Phone", Amount: 20}}
 	got, _ := Calculate(in)
-	// 900 + 300 + 42.89 + 20 = 1,262.89; left = 2,617.50 - 1,262.89 = 1,354.61
+	// 900 + 300 + 42.89 + 20 = 1,262.89; left = 2,605.50 - 1,262.89 = 1,342.61
 	e := got.Expenses
 	if !near(e.Rent, 900) || !near(e.Savings, 300) || !near(e.Subscriptions, 42.89) || !near(e.Custom, 20) || !near(e.Total, 1262.89) {
 		t.Errorf("expenses = %+v", e)
 	}
-	if !near(got.Left, 1354.61) {
-		t.Errorf("left = %v, want 1354.61", got.Left)
+	if !near(got.Left, 1342.61) {
+		t.Errorf("left = %v, want 1342.61", got.Left)
 	}
-	if !near(got.SavingsRate, 300/2617.50) || !near(got.ExpenseRate, 1262.89/2617.50) {
+	if !near(got.SavingsRate, 300/2605.50) || !near(got.ExpenseRate, 1262.89/2605.50) {
 		t.Errorf("rates = %v / %v", got.SavingsRate, got.ExpenseRate)
 	}
 }
@@ -334,4 +334,18 @@ func TestCalculateWerkstudentNotes(t *testing.T) {
 	if !slices.Contains(got.Notes, NoteBBGCapped) {
 		t.Errorf("werkstudent at 9,000: notes %v lack %s", got.Notes, NoteBBGCapped)
 	}
+}
+
+// A real October 2026 payslip (class I, childless, no church tax, Berlin, TK with
+// Zusatzbeitrag 2.69%): every contribution and the Lohnsteuer must match to the cent.
+func TestCalculateMatchesPayslip(t *testing.T) {
+	in := base(4916.67)
+	in.Bundesland = "BE"
+	in.ZusatzbeitragPct = 2.69
+	got, err := Calculate(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// KV 4916.67*(7.3%+1.345%) = 425.05, RV 9.3% = 457.25, AV 1.3% = 63.92, PV 2.4% = 118.00.
+	check(t, "payslip", got, want{rv: 457.25, av: 63.92, kv: 425.05, pv: 118, lst: 761.58, net: 3090.87})
 }
