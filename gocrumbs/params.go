@@ -19,7 +19,8 @@ type Params struct {
 	bbgKVPVYear int64 // Beitragsbemessungsgrenze KV/PV, cents per year
 	rvEmployee  int64 // employee share of Rentenversicherung
 	avEmployee  int64 // employee share of Arbeitslosenversicherung
-	kvBase      int64 // employee share of KV without Zusatzbeitrag (half of 14.6% general rate)
+	kvEmployee  int64 // employee share of KV without Zusatzbeitrag (half of the 14.6% general rate)
+	kvBase      int64 // KV rate the PAP uses for the Vorsorgepauschale (7%, without the Krankengeld part)
 	pvBase      int64 // employee share of PV
 	pvSachsen   int64 // employee share of PV in Sachsen
 	pvSurcharge int64 // Zuschlag for childless
@@ -63,7 +64,8 @@ var params2026 = Params{
 	bbgKVPVYear: 6_975_000,  // 69,750 EUR (PAP MPARA BBGKVPV)
 	rvEmployee:  93_000,     // 9.30%
 	avEmployee:  13_000,     // 1.30%
-	kvBase:      70_000,     // 7.00%
+	kvEmployee:  73_000,     // 7.30%
+	kvBase:      70_000,     // 7.00% (PAP KVSATZAN, Vorsorgepauschale only)
 	pvBase:      18_000,     // 1.80%
 	pvSachsen:   23_000,     // 2.30%
 	pvSurcharge: 6_000,      // 0.60%

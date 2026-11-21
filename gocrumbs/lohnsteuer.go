@@ -48,7 +48,8 @@ func max64(a, b int64) int64 {
 	return b
 }
 
-// kvsatzan is the employee KV rate in ppm: 7% + Zusatzbeitrag / 2.
+// kvsatzan is the KV rate the PAP uses for the Vorsorgepauschale, in ppm: 7% + Zusatzbeitrag / 2.
+// It is not the contribution actually paid; see kvRate.
 func (p *Params) kvsatzan(kvzHundredths int64) int64 {
 	return p.kvBase + kvzHundredths*50
 }

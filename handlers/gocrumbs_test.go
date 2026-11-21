@@ -141,8 +141,8 @@ func TestCalculateGoCrumbsEndToEnd(t *testing.T) {
 	if code != http.StatusOK || !resp.Success {
 		t.Fatalf("status %d: %+v", code, resp)
 	}
-	if resp.Data.TaxYear != 2026 || resp.Data.Gross != 4000 || resp.Data.Net != 2617.5 || resp.Data.Left != 1417.5 {
-		t.Errorf("got %+v, want year 2026, gross 4000, net 2617.50, left 1417.50", resp.Data)
+	if resp.Data.TaxYear != 2026 || resp.Data.Gross != 4000 || resp.Data.Net != 2605.5 || resp.Data.Left != 1405.5 {
+		t.Errorf("got %+v, want year 2026, gross 4000, net 2605.50, left 1405.50", resp.Data)
 	}
 	if len(resp.Data.Notes) == 0 || resp.Data.Notes[0] != "childless_surcharge" {
 		t.Errorf("notes = %v, want childless_surcharge", resp.Data.Notes)
@@ -153,8 +153,8 @@ func TestCalculateGoCrumbsYearlyGross(t *testing.T) {
 	// 48,000 per year is the same as 4,000 per month
 	body := strings.Replace(goCrumbsBody(""), `"gross_amount":4000,"gross_period":"month"`, `"gross_amount":48000,"gross_period":"year"`, 1)
 	code, resp := calcResponse(t, body)
-	if code != http.StatusOK || resp.Data.Net != 2617.5 {
-		t.Errorf("status %d net %v, want 200 / 2617.50", code, resp.Data.Net)
+	if code != http.StatusOK || resp.Data.Net != 2605.5 {
+		t.Errorf("status %d net %v, want 200 / 2605.50", code, resp.Data.Net)
 	}
 }
 

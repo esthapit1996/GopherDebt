@@ -65,6 +65,7 @@ Taken directly from the PAP 2026 (final, 12.11.2025): social-insurance ceilings 
 
 - Midijob factor `F = 0.6619` is derived (0.28 / 42.3%), not read from an official publication.
 - The extra Entlastungsbetrag for a 2nd child and beyond in Steuerklasse II (+240 EUR/child) is entered by the Finanzamt as an ELStAM Freibetrag, not part of the PAP.
+- KV is paid at 7.3% + Zusatzbeitrag / 2. The PAP's 7% (no Krankengeld part) is only used inside the Vorsorgepauschale, not for the contribution.
 - For a Werkstudent the Vorsorgepauschale excludes the AV part but keeps the fictitious KV/PV part (as for any statutorily insured employee).
 - Kirchensteuer is the Bemessungsgrundlage x rate, rounded half up. Contribution lines are rounded half up. Expect ±1 cent versus a payslip.
 - Classes I and IV share the Kinderfreibetrag with the other parent (4,878 per child); II and III get 9,756.

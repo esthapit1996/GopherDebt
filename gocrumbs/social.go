@@ -37,6 +37,11 @@ func (p *Params) contribBases(gross, capRV, capKV int64, allowMidijob bool) (b b
 	return b, false, b.rv < gross || b.kv < gross
 }
 
+// kvRate is the employee KV rate in ppm: 7.3% + Zusatzbeitrag / 2.
+func (p *Params) kvRate(kvzHundredths int64) int64 {
+	return p.kvEmployee + kvzHundredths*50
+}
+
 // employeeContribs computes the employee shares. rvOnly is the Werkstudent case:
 // exempt from KV, PV and AV, but still paying Rentenversicherung.
 func (p *Params) employeeContribs(b bases, rvOnly bool, kvzHundredths, pvRate int64) contribs {
@@ -45,7 +50,7 @@ func (p *Params) employeeContribs(b bases, rvOnly bool, kvzHundredths, pvRate in
 		return c
 	}
 	c.av = roundHalfUp(b.rv*p.avEmployee, e6)
-	c.kv = roundHalfUp(b.kv*p.kvsatzan(kvzHundredths), e6)
+	c.kv = roundHalfUp(b.kv*p.kvRate(kvzHundredths), e6)
 	c.pv = roundHalfUp(b.kv*pvRate, e6)
 	return c
 }

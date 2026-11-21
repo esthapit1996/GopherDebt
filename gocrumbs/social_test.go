@@ -31,12 +31,16 @@ func TestMidijobBaseNeverExceedsGross(t *testing.T) {
 
 func TestKVRate(t *testing.T) {
 	p, _ := ForYear(2026)
-	// 7.00% + 2.90% / 2 = 8.45%
+	// Contribution actually paid: 7.30% + 2.90% / 2 = 8.75%.
+	if got := p.kvRate(290); got != 87_500 {
+		t.Errorf("kvRate(2.90%%) = %d, want 87500", got)
+	}
+	if got := p.kvRate(0); got != 73_000 {
+		t.Errorf("kvRate(0) = %d, want 73000", got)
+	}
+	// The PAP's Vorsorgepauschale rate stays at 7.00% + Zusatzbeitrag / 2.
 	if got := p.kvsatzan(290); got != 84_500 {
 		t.Errorf("kvsatzan(2.90%%) = %d, want 84500", got)
-	}
-	if got := p.kvsatzan(0); got != 70_000 {
-		t.Errorf("kvsatzan(0) = %d, want 70000", got)
 	}
 }
 
@@ -105,8 +109,8 @@ func TestEmployeeContribsWerkstudentPaysOnlyRV(t *testing.T) {
 	p, _ := ForYear(2026)
 	b := bases{rv: 200_000, kv: 200_000}
 	full := p.employeeContribs(b, false, 290, 24_000)
-	// 2,000.00: RV 9.3% = 186.00, AV 1.3% = 26.00, KV 8.45% = 169.00, PV 2.4% = 48.00
-	if full != (contribs{rv: 18_600, av: 2_600, kv: 16_900, pv: 4_800}) {
+	// 2,000.00: RV 9.3% = 186.00, AV 1.3% = 26.00, KV 8.75% = 175.00, PV 2.4% = 48.00
+	if full != (contribs{rv: 18_600, av: 2_600, kv: 17_500, pv: 4_800}) {
 		t.Errorf("full contribs = %+v", full)
 	}
 	werk := p.employeeContribs(b, true, 290, 24_000)
