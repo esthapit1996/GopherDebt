@@ -196,8 +196,12 @@ func (p *Params) payslip(gross int64, stkl int, zkfTenths int, freibJahr int64, 
 		midijob: reduced,
 		capped:  capped,
 	}
+	// A Werkstudent bears no KV/PV contributions through the employer, so the 2026
+	// Vorsorgepauschale has no KV/PV part: PKV = 1 with no contributions (checked against
+	// 2026 payslips, where only the pension part reduces the taxable income).
 	res := p.pap(papIn{
 		zre4j:         gross * 12,
+		pkv:           ctx.werkstudent,
 		stkl:          stkl,
 		zkfTenths:     zkfTenths,
 		freibJahr:     freibJahr,

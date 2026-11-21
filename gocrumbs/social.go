@@ -12,17 +12,18 @@ type bases struct{ rv, kv int64 }
 // roundHalfUp divides non-negative num by den, rounding half up.
 func roundHalfUp(num, den int64) int64 { return (num + den/2) / den }
 
-// midijobBase is the reduced beitragspflichtige Einnahme of the employee in the
-// Uebergangsbereich (§ 20 Abs. 2a SGB IV), for gross ae in cents with
+// midijobBase is the beitragspflichtige Einnahme the employee's share is calculated on in
+// the Uebergangsbereich (§ 20 Abs. 2a SGB IV), for gross ae in cents with
 // minijobMax < ae <= midijobMax:
 //
-//	BE = F*G + ((OG - G*F) / (OG - G)) * (AE - G)
+//	AE_AN = OG / (OG - G) * (AE - G)
 //
-// Evaluated with one common denominator and a single rounding.
+// It grows from 0 at the Minijob limit to the full gross at OG. The factor F only
+// matters for the total contribution (and so for the employer's share), not here.
+// Confirmed against payslips ("Beitragspfl. Einnahme AN"): 1,360.00 in 2026 gives 1,083.75.
 func (p *Params) midijobBase(ae int64) int64 {
-	g, og, f := p.minijobMax, p.midijobMax, p.midijobF
-	num := f*g*(og-g) + (og*10_000-g*f)*(ae-g)
-	return roundHalfUp(num, (og-g)*10_000)
+	g, og := p.minijobMax, p.midijobMax
+	return roundHalfUp(og*(ae-g), og-g)
 }
 
 // contribBases returns the contribution bases of a gross (cents/month) within the

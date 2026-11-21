@@ -36,7 +36,7 @@ res, err := gocrumbs.Calculate(gocrumbs.Input{
 | Situation | Rule |
 |-----------|------|
 | Gross up to €603/month | Minijob: net = gross, no deductions |
-| €603.01 to €2,000 | Midijob: employee shares on the reduced base (`BE = F*G + ((OG - G*F)/(OG - G))*(AE - G)`) |
+| €603.01 to €2,000 | Midijob: employee shares on the reduced base `OG/(OG - G) * (AE - G)` (G = 603, OG = 2,000) |
 | Above the ceilings | RV/AV capped at €8,450/month, KV/PV at €5,812.50/month |
 | Werkstudent | Only Rentenversicherung (reduced in the Uebergangsbereich); Lohnsteuer as normal |
 | Side income (FTE only) | Up to €603: net = gross. Above: second job in Steuerklasse VI, social insurance on the headroom left under the ceilings |
@@ -62,12 +62,13 @@ res, err := gocrumbs.Calculate(gocrumbs.Input{
 
 Taken directly from the PAP 2026 (final, 12.11.2025): social-insurance ceilings and rates, PV rules incl. Sachsen, Vorsorgepauschale method, allowances (Arbeitnehmer-Pauschbetrag 1,230; Sonderausgaben 36; Entlastungsbetrag 4,260), Kinderfreibetrag 9,756 (4,878 in Steuerklasse IV), Steuerklasse V/VI limits, Soli Freigrenze 20,350 and the 11.9% Milderungszone.
 
+**Checked against real payslips (to the cent, in `calc_test.go`):** an employee in 2026 with on-call pay (class I, childless, Zusatzbeitrag 2.69%), and a Werkstudent in the Midijob range in 2026 (RV, Lohnsteuer, payout). The Midijob base formula also reproduces a September 2025 payslip, and the Werkstudent RV above 2,000 matches an August 2025 one.
+
 **Assumptions to verify before relying on them:**
 
-- Midijob factor `F = 0.6619` is derived (0.28 / 42.3%), not read from an official publication.
 - The extra Entlastungsbetrag for a 2nd child and beyond in Steuerklasse II (+240 EUR/child) is entered by the Finanzamt as an ELStAM Freibetrag, not part of the PAP.
 - KV is paid at 7.3% + Zusatzbeitrag / 2. The PAP's 7% (no Krankengeld part) is only used inside the Vorsorgepauschale, not for the contribution.
-- For a Werkstudent the Vorsorgepauschale excludes the AV part but keeps the fictitious KV/PV part (as for any statutorily insured employee).
+- For a Werkstudent the Vorsorgepauschale only has the pension part (no AV, KV or PV part): a Werkstudent bears no KV/PV contributions through the employer. This is inferred from two 2026 payslips, which it reproduces to the cent; the PAP itself doesn't say so.
 - Kirchensteuer is the Bemessungsgrundlage x rate, rounded half up. Contribution lines are rounded half up. Expect ±1 cent versus a payslip.
 - Classes I and IV share the Kinderfreibetrag with the other parent (4,878 per child); II and III get 9,756.
 - All children are treated as under 25 for the PV Abschlag.
