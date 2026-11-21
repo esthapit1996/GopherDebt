@@ -324,3 +324,11 @@ func TestGoCrumbsRejectsInvalidInactiveIncome(t *testing.T) {
 		t.Errorf("yearly: status %d net %v, want 200 / 1244.30", code, resp.Data.Net)
 	}
 }
+
+// The calculate response always carries "notes": [], never null, even when no note applies
+func TestCalculateGoCrumbsNotesNeverNull(t *testing.T) {
+	w := doJSON(goCrumbsRouter(), "POST", "/gocrumbs/calculate", goCrumbsBody(`"under_23":true`))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"notes":[]`) {
+		t.Errorf("status %d body %s, want notes []", w.Code, w.Body.String())
+	}
+}

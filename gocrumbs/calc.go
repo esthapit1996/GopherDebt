@@ -337,7 +337,7 @@ func sumExpenses(list []Expense) int64 {
 }
 
 func notes(in Input, p *Params, main, side job, mainGross, sideGross int64, pvz bool) []string {
-	var out []string
+	out := []string{} // never nil: the API must send [] (the page reads notes.length)
 	add := func(cond bool, code string) {
 		if cond {
 			out = append(out, code)
