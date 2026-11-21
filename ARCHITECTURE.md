@@ -40,7 +40,7 @@ GopherDebt/
 │   ├── stash.go         # GopherStash personal expenses
 │   ├── wish.go          # GoWish personal wishlist
 │   ├── wish_lists.go    # GoWish shared wish groups
-│   ├── gocrumbs.go      # GoCrumbs budget profile + expense lines
+│   ├── gocrumbs.go      # GoCrumbs budget profile, expense + extra pay lines
 │   ├── access_control.go # Email whitelist/blacklist
 │   ├── retry.go         # Generic retry with backoff
 │   ├── migrations.go    # Schema creation
@@ -238,22 +238,22 @@ Starts listening for HTTP requests.
 │ created_at       │   set = shared wish (user_id = who added it)
 └──────────────────┘
 
-┌───────────────────┐   ┌───────────────────┐
-│ gocrumbs_profiles │   │ gocrumbs_expenses │
-├───────────────────┤   ├───────────────────┤
-│ user_id (PK, FK)  │   │ id (PK)           │
-│ work_type         │   │ user_id (FK)      │
-│ gross_amount      │   │ kind              │
-│ gross_period      │   │ name              │
-│ side_gross        │   │ amount            │
-│ steuerklasse      │   │ category          │
-│ church_tax        │   │ position          │
-│ bundesland        │   └───────────────────┘
-│ children          │   kind = subscription | custom
-│ under_23          │
-│ zusatzbeitrag     │   Inputs only: net pay and
-│ rent, savings     │   "left" are always recalculated
-│ updated_at        │
+┌───────────────────┐   ┌───────────────────┐   ┌───────────────────┐
+│ gocrumbs_profiles │   │ gocrumbs_expenses │   │ gocrumbs_extra_pay│
+├───────────────────┤   ├───────────────────┤   ├───────────────────┤
+│ user_id (PK, FK)  │   │ id (PK)           │   │ id (PK)           │
+│ work_type         │   │ user_id (FK)      │   │ user_id (FK)      │
+│ gross_amount      │   │ kind              │   │ name              │
+│ gross_period      │   │ name              │   │ amount            │
+│ side_gross        │   │ amount            │   │ tax_free          │
+│ steuerklasse      │   │ category          │   │ position          │
+│ church_tax        │   │ position          │   └───────────────────┘
+│ bundesland        │   └───────────────────┘   flat pay on top of the
+│ children          │   kind = subscription     salary, e.g. on-call
+│ under_23          │          | custom
+│ zusatzbeitrag     │
+│ rent, savings     │   Inputs only: net pay and "left"
+│ updated_at        │   are always recalculated
 └───────────────────┘
 ```
 

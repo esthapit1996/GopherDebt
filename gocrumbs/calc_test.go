@@ -349,3 +349,76 @@ func TestCalculateMatchesPayslip(t *testing.T) {
 	// KV 4916.67*(7.3%+1.345%) = 425.05, RV 9.3% = 457.25, AV 1.3% = 63.92, PV 2.4% = 118.00.
 	check(t, "payslip", got, want{rv: 457.25, av: 63.92, kv: 425.05, pv: 118, lst: 761.58, net: 3090.87})
 }
+
+// The same payslip with its on-call lines (taxable 500.00 and tax-free 150.00): total
+// Lohnsteuer 899.66, social insurance 1,172.44 and payout 3,494.57 as printed.
+func TestCalculateExtraPayMatchesPayslip(t *testing.T) {
+	in := base(4916.67)
+	in.Bundesland = "BE"
+	in.ZusatzbeitragPct = 2.69
+	in.Extra = []ExtraPay{{Name: "On-call", Amount: 500}, {Name: "On-call Sunday", Amount: 150, TaxFree: true}}
+	got, err := Calculate(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Taxable gross 5,416.67: KV 468.27, RV 503.75, AV 70.42, PV 130.00.
+	check(t, "payslip+extra", got, want{rv: 503.75, av: 70.42, kv: 468.27, pv: 130, lst: 899.66, net: 3494.57})
+	if !near(got.Gross, 5566.67) || !near(got.ExtraTaxable, 500) || !near(got.ExtraFree, 150) {
+		t.Errorf("gross %v extra taxable %v free %v, want 5566.67 / 500 / 150", got.Gross, got.ExtraTaxable, got.ExtraFree)
+	}
+	if !near(got.TotalDeductions, 899.66+1172.44) {
+		t.Errorf("deductions = %v, want %v", got.TotalDeductions, 899.66+1172.44)
+	}
+}
+
+func TestCalculateExtraPay(t *testing.T) {
+	t.Run("taxable extra equals the same amount of salary", func(t *testing.T) {
+		a := base(4500)
+		b := base(4000)
+		b.Extra = []ExtraPay{{Name: "On-call", Amount: 500}}
+		ra, _ := Calculate(a)
+		rb, _ := Calculate(b)
+		if ra.Net != rb.Net || ra.Lohnsteuer != rb.Lohnsteuer || ra.KV != rb.KV || ra.Gross != rb.Gross {
+			t.Errorf("salary %+v vs extra %+v", ra, rb)
+		}
+	})
+	t.Run("tax-free extra is paid out in full and changes no deduction", func(t *testing.T) {
+		a, _ := Calculate(base(4000))
+		in := base(4000)
+		in.Extra = []ExtraPay{{Name: "Sunday", Amount: 150, TaxFree: true}}
+		got, _ := Calculate(in)
+		if !near(got.Net, a.Net+150) || got.TotalDeductions != a.TotalDeductions || !near(got.Gross, 4150) {
+			t.Errorf("net %v deductions %v gross %v, want %v / %v / 4150", got.Net, got.TotalDeductions, got.Gross, a.Net+150, a.TotalDeductions)
+		}
+		if !near(got.TaxRate, a.TaxRate) {
+			t.Errorf("tax rate %v, want %v (tax-free pay is outside the taxable gross)", got.TaxRate, a.TaxRate)
+		}
+	})
+	t.Run("extra pay counts towards left", func(t *testing.T) {
+		in := base(4000)
+		in.Rent = 1000
+		in.Extra = []ExtraPay{{Name: "Sunday", Amount: 100, TaxFree: true}}
+		got, _ := Calculate(in)
+		if !near(got.Left, got.Net-1000) || !near(got.Net, 2605.50+100) {
+			t.Errorf("net %v left %v", got.Net, got.Left)
+		}
+	})
+	t.Run("negative or huge extra is rejected", func(t *testing.T) {
+		for _, amount := range []float64{-1, 2e6} {
+			in := base(4000)
+			in.Extra = []ExtraPay{{Name: "x", Amount: amount}}
+			if _, err := Calculate(in); !errors.Is(err, ErrInvalidInput) {
+				t.Errorf("amount %v: err = %v, want ErrInvalidInput", amount, err)
+			}
+		}
+	})
+	t.Run("works for a Werkstudent", func(t *testing.T) {
+		in := base(1500)
+		in.WorkType = WorkWerkstudent
+		in.Extra = []ExtraPay{{Name: "Bonus", Amount: 100, TaxFree: true}}
+		got, err := Calculate(in)
+		if err != nil || got.KV != 0 || !near(got.ExtraFree, 100) {
+			t.Errorf("err %v result %+v", err, got)
+		}
+	})
+}

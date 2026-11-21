@@ -245,6 +245,16 @@ One named monthly expense (a subscription or a custom line).
 | `Amount` | `float64` | `gte=0,max=1000000` | EUR per month |
 | `Category` | `string` | `max=30` | Optional tag |
 
+### GoCrumbsExtraPayLine
+
+Flat monthly pay on top of the salary, such as on-call pay.
+
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `Name` | `string` | `required,max=60` | Trimmed, must not be blank (checked in the handler) |
+| `Amount` | `float64` | `gte=0,max=1000000` | EUR per month |
+| `TaxFree` | `bool` | | Paid out in full (e.g. Sunday and holiday surcharges). Default: taxable, with social insurance like salary |
+
 ### GoCrumbsRequest
 
 A GoCrumbs budget profile, used to save it and to calculate. Inputs only, never results.
@@ -263,6 +273,7 @@ A GoCrumbs budget profile, used to save it and to calculate. Inputs only, never 
 | `Zusatzbeitrag` | `float64` | `gte=0,max=10` | Health insurer's additional rate in % (full rate; the employee pays half) |
 | `Rent`, `Savings` | `float64` | `gte=0,max=1000000` | EUR per month |
 | `Subscriptions`, `CustomExpenses` | `[]GoCrumbsExpenseLine` | `max=50,dive` | Expense lines (50 in total, checked in the handler) |
+| `ExtraPay` | `[]GoCrumbsExtraPayLine` | `max=20,dive` | Extra pay lines (on-call etc.) |
 
 ---
 
