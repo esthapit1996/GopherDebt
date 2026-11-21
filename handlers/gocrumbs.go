@@ -160,7 +160,18 @@ func goCrumbsInput(req *models.GoCrumbsRequest, year int) gocrumbs.Input {
 
 // calculateGoCrumbs runs the engine for a profile, writing a 400/500 on failure
 func calculateGoCrumbs(c *gin.Context, req *models.GoCrumbsRequest) (gocrumbs.Result, bool) {
-	res, err := gocrumbs.Calculate(goCrumbsInput(req, goCrumbsTaxYear(time.Now())))
+	year := goCrumbsTaxYear(time.Now())
+	res, err := gocrumbs.Calculate(goCrumbsInput(req, year))
+	if err == nil {
+		// The other work type's fields are stored too and count again after switching, so they
+		// must be calculable as well; otherwise the profile would fail only after the switch
+		other := *req
+		other.WorkType = gocrumbs.WorkWerkstudent
+		if req.WorkType == gocrumbs.WorkWerkstudent {
+			other.WorkType = gocrumbs.WorkFTE
+		}
+		_, err = gocrumbs.Calculate(goCrumbsInput(&other, year))
+	}
 	if errors.Is(err, gocrumbs.ErrInvalidInput) {
 		c.JSON(http.StatusBadRequest, models.APIResponse{
 			Success: false,

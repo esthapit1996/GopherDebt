@@ -408,7 +408,7 @@ type GoCrumbsHandler struct {
 
 - `bindGoCrumbs` binds the body (ranges are in `models.GoCrumbsRequest`), trims expense and extra pay names and rejects blank ones, and caps expense lines at 50 in total and extra pay lines at 20.
 - `goCrumbsInput` converts the profile to the engine's input and only uses the fields of the chosen work type: an employee's gross (yearly becomes monthly), side income and extra pay, or a Werkstudent's hourly wage × hours (weekly hours × 52/12). The other type's fields are ignored, not rejected, because they stay stored. `bindGoCrumbs` defaults `ws_hours_period` to `month` and caps weekly hours at 168. `calculateGoCrumbs` runs `gocrumbs.Calculate`; engine validation failures (`ErrInvalidInput`) become a `400`.
-- PUT calculates before saving, so every saved profile can be shown again.
+- PUT calculates before saving, so every saved profile can be shown again. Calculate and PUT also check that the other work type's stored fields are calculable (e.g. an employee gross above the engine's range on a Werkstudent profile is a `400`), so switching work type later never fails.
 - The tax year is the latest one the engine supports that is not after the current year (`goCrumbsTaxYear`). It is returned as `tax_year` so the UI can say which year was used.
 - The database stores inputs only; results are never stored, so a tax-year update corrects everyone's numbers.
 

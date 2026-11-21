@@ -306,3 +306,21 @@ func TestCalculateGoCrumbsWorkTypesAreSeparate(t *testing.T) {
 		t.Errorf("Werkstudent fields leaked into an employee: %+v vs %+v", fte.Data, fteWithStudentData.Data)
 	}
 }
+
+// The inactive employee fields are stored too, so a Werkstudent profile with an employee gross the
+// engine rejects (above 1,000,000 a month) must fail now, not only after switching to employee
+func TestGoCrumbsRejectsInvalidInactiveIncome(t *testing.T) {
+	body := strings.Replace(werkstudentBody(`"ws_hourly_wage":17,"ws_hours":80`), `"gross_amount":4916.67`, `"gross_amount":2000000`, 1)
+	if code, resp := calcResponse(t, body); code != http.StatusBadRequest || resp.Error == "" {
+		t.Errorf("calculate: status %d resp %+v, want 400 with an error", code, resp)
+	}
+	// Save validates before it touches the database (nil DB in this router)
+	if w := doJSON(goCrumbsRouter(), "PUT", "/gocrumbs", body); w.Code != http.StatusBadRequest {
+		t.Errorf("save: status %d, want 400", w.Code)
+	}
+	// A yearly gross of the same amount is fine (166,666.67 a month)
+	yearly := strings.Replace(body, `"gross_period":"month"`, `"gross_period":"year"`, 1)
+	if code, resp := calcResponse(t, yearly); code != http.StatusOK || resp.Data.Net != 1244.30 {
+		t.Errorf("yearly: status %d net %v, want 200 / 1244.30", code, resp.Data.Net)
+	}
+}
