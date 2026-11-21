@@ -77,7 +77,7 @@ func GetGroupExpenses(d *sql.DB, groupID int) ([]models.Expense, error) {
 		}
 		defer rows.Close()
 
-		var expenses []models.Expense
+		expenses := []models.Expense{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var expense models.Expense
 			var payer models.User
@@ -111,7 +111,7 @@ func GetExpenseSplits(d *sql.DB, expenseID int) ([]models.ExpenseSplit, error) {
 		}
 		defer rows.Close()
 
-		var splits []models.ExpenseSplit
+		splits := []models.ExpenseSplit{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var split models.ExpenseSplit
 			var user models.User
@@ -192,7 +192,7 @@ func GetUnpaidExpensesForUser(d *sql.DB, groupID, userID int) ([]models.Expense,
 		}
 		defer rows.Close()
 
-		var expenses []models.Expense
+		expenses := []models.Expense{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var expense models.Expense
 			var payer models.User

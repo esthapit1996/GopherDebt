@@ -52,7 +52,7 @@ func GetWhitelist(db *sql.DB) ([]WhitelistEntry, error) {
 	}
 	defer rows.Close()
 
-	var entries []WhitelistEntry
+	entries := []WhitelistEntry{} // never nil: an empty list is [] in the API, not null
 	for rows.Next() {
 		var entry WhitelistEntry
 		var addedBy sql.NullInt64
@@ -78,7 +78,7 @@ func GetBlacklist(db *sql.DB) ([]BlacklistEntry, error) {
 	}
 	defer rows.Close()
 
-	var entries []BlacklistEntry
+	entries := []BlacklistEntry{} // never nil: an empty list is [] in the API, not null
 	for rows.Next() {
 		var entry BlacklistEntry
 		var addedBy sql.NullInt64

@@ -42,7 +42,7 @@ func GetWishItems(d *sql.DB, userID int) ([]models.WishItem, error) {
 		}
 		defer rows.Close()
 
-		var items []models.WishItem
+		items := []models.WishItem{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var w models.WishItem
 			if err := scanWishItem(rows, &w); err != nil {

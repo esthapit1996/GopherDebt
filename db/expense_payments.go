@@ -36,7 +36,7 @@ func GetExpensePayments(d *sql.DB, expenseID int) ([]models.ExpensePayment, erro
 		}
 		defer rows.Close()
 
-		var payments []models.ExpensePayment
+		payments := []models.ExpensePayment{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var payment models.ExpensePayment
 			var user models.User

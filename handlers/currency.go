@@ -214,7 +214,7 @@ func (h *CurrencyHandler) GetHistory(c *gin.Context) {
 	}
 
 	// Convert to sorted slice
-	var history []HistoricalRate
+	history := []HistoricalRate{} // never nil: an empty list is [] in the API, not null
 	for date, rates := range result.Rates {
 		if rate, ok := rates[to]; ok {
 			history = append(history, HistoricalRate{
