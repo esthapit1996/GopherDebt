@@ -481,3 +481,17 @@ func TestCalculateMidijobPV(t *testing.T) {
 		}
 	}
 }
+
+// With no note applying (childless, under 23, regular income) Notes must be an empty list, not nil:
+// nil became "notes": null in the API and crashed the page.
+func TestCalculateNoNotesIsEmptyNotNil(t *testing.T) {
+	in := base(4000)
+	in.Under23 = true
+	got, err := Calculate(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Notes == nil || len(got.Notes) != 0 {
+		t.Errorf("Notes = %#v, want an empty non-nil slice", got.Notes)
+	}
+}
