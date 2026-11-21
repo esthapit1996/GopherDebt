@@ -106,8 +106,8 @@ func TestCalculateScenarios(t *testing.T) {
 
 	t.Run("Midijob for FTE: reduced base for all four branches", func(t *testing.T) {
 		got, _ := Calculate(base(1000))
-		// BE = 854.06: RV 79.43, AV 11.10, KV 74.73, PV 20.50.
-		if !near(got.RV, 79.43) || !near(got.AV, 11.10) || !near(got.KV, 74.73) || !near(got.PV, 20.50) {
+		// Employee base 20/13.97 * (1000 - 603) = 568.36: RV 52.86, AV 7.39, KV 49.73, PV 13.64.
+		if !near(got.RV, 52.86) || !near(got.AV, 7.39) || !near(got.KV, 49.73) || !near(got.PV, 13.64) {
 			t.Errorf("midijob contribs = %v %v %v %v", got.RV, got.AV, got.KV, got.PV)
 		}
 		if !slices.Contains(got.Notes, NoteMidijobReduced) {
@@ -123,17 +123,18 @@ func TestCalculateWerkstudent(t *testing.T) {
 		return in
 	}
 	t.Run("1,000: pension only, no tax", func(t *testing.T) {
-		// Midijob base 854.06 -> RV 79.43. Taxable income stays below the Grundfreibetrag.
+		// Employee base 568.36 -> RV 52.86. Taxable income stays below the Grundfreibetrag.
 		got, _ := Calculate(werk(1000))
-		check(t, "werk1000", got, want{rv: 79.43, net: 920.57})
+		check(t, "werk1000", got, want{rv: 52.86, net: 947.14})
 		if !slices.Contains(got.Notes, NoteWerkstudentRVOnly) {
 			t.Errorf("notes %v lack %s", got.Notes, NoteWerkstudentRVOnly)
 		}
 	})
 	t.Run("1,800: pension only, some Lohnsteuer", func(t *testing.T) {
-		// BE = 1,770.81 -> RV 164.69. Lohnsteuer 629/yr -> 52.41/month.
+		// Employee base 1,713.67 -> RV 159.37. Taxable 21,600 - 1,230 - 36 - 2,008 (pension part
+		// only) = 18,325 -> Lohnsteuer 1,161/yr -> 96.75/month.
 		got, _ := Calculate(werk(1800))
-		check(t, "werk1800", got, want{rv: 164.69, lst: 52.41, net: 1582.90})
+		check(t, "werk1800", got, want{rv: 159.37, lst: 96.75, net: 1543.88})
 	})
 	t.Run("above 2,000: full RV rate, still no KV/PV/AV", func(t *testing.T) {
 		got, _ := Calculate(werk(2500))
@@ -421,4 +422,29 @@ func TestCalculateExtraPay(t *testing.T) {
 			t.Errorf("err %v result %+v", err, got)
 		}
 	})
+}
+
+// Two 2026 payslips of a Werkstudent (class I, Berlin, 17 EUR/hour, Midijob range). In June the
+// monthly pay is 1,360.00: employee base 1,083.75 (printed as "Beitragspfl. Einnahme AN"), RV
+// 100.79 and Lohnsteuer 14.91, which only a pension-only Vorsorgepauschale produces. The May
+// payslip was corrected afterwards to 1,632.00: totals of both lines are RV 137.00 (base 1,473.16)
+// and Lohnsteuer 14.91 + 46.59, payout 1,433.50.
+func TestCalculateMatchesWerkstudentPayslips(t *testing.T) {
+	werk := func(gross float64) Input {
+		in := base(gross)
+		in.Bundesland = "BE"
+		in.WorkType = WorkWerkstudent
+		return in
+	}
+	// Independent check of the taxable income: 16,320 - 1,230 - 36 - 9.3% * 16,320 = 13,536
+	// -> tariff 179/yr -> 14.91/month.
+	got, err := Calculate(werk(1360))
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, "june", got, want{rv: 100.79, lst: 14.91, net: 1244.30})
+
+	// 19,584 - 1,266 - 1,821 = 16,496 -> tariff 738/yr -> 61.50/month.
+	got, _ = Calculate(werk(1632))
+	check(t, "may", got, want{rv: 137.00, lst: 61.50, net: 1433.50})
 }

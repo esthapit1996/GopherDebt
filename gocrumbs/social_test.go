@@ -2,21 +2,31 @@ package gocrumbs
 
 import "testing"
 
-// Expected Midijob bases: BE = F*G + ((OG - G*F)/(OG - G)) * (AE - G) with
-// G = 603, OG = 2,000, F = 0.6619, evaluated with exact fractions and rounded half up.
+// Expected employee Midijob bases: OG / (OG - G) * (AE - G) with G = 603, OG = 2,000,
+// evaluated with exact fractions and rounded half up.
 func TestMidijobBase(t *testing.T) {
 	p, _ := ForYear(2026)
 	cases := []struct{ ae, want int64 }{
-		{60301, 39914},   // just above the Minijob limit: ~ F*G = 399.13
-		{100000, 85406},  // 1,000.00
-		{150000, 142703}, // 1,500.00
+		{60301, 1},       // just above the Minijob limit: almost nothing is contribution-bearing
+		{100000, 56836},  // 1,000.00
+		{136000, 108375}, // 1,360.00, the "Beitragspfl. Einnahme AN" of a June 2026 payslip (1,083.75)
+		{150000, 128418}, // 1,500.00
 		{199999, 199999}, // slope is ~1.0 near the top
-		{200000, 200000}, // continuous: BE = OG at the upper limit
+		{200000, 200000}, // continuous: the base equals the gross at the upper limit
 	}
 	for _, c := range cases {
 		if got := p.midijobBase(c.ae); got != c.want {
 			t.Errorf("midijobBase(%d) = %d, want %d", c.ae, got, c.want)
 		}
+	}
+}
+
+// The same formula for 2025 (Minijob limit 556) reproduces a September 2025 payslip:
+// 1,360.00 gross gives 1,113.57 as the employee's base.
+func TestMidijobBase2025Payslip(t *testing.T) {
+	p := &Params{minijobMax: 55_600, midijobMax: 200_000}
+	if got := p.midijobBase(136_000); got != 111_357 {
+		t.Errorf("midijobBase(1360.00) = %d, want 111357", got)
 	}
 }
 
@@ -94,7 +104,7 @@ func TestContribBasesCeilings(t *testing.T) {
 		{"between ceilings", 700_000, 700_000, 581_250, false, true, true},
 		{"exactly at RV ceiling", 845_000, 845_000, 581_250, false, true, true},
 		{"above both ceilings", 1_000_000, 845_000, 581_250, false, true, true},
-		{"midijob", 100_000, 85_406, 85_406, true, false, true},
+		{"midijob", 100_000, 56_836, 56_836, true, false, true},
 		{"midijob not allowed (side job)", 100_000, 100_000, 100_000, false, false, false},
 	}
 	for _, c := range cases {

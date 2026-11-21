@@ -29,7 +29,6 @@ type Params struct {
 	// Minijob / Midijob (Uebergangsbereich).
 	minijobMax int64 // cents per month
 	midijobMax int64 // cents per month
-	midijobF   int64 // Faktor F in 1e-4
 
 	// Income tax, § 32a EStG tariff (zvE in whole euros).
 	grundfreibetrag int64
@@ -73,8 +72,6 @@ var params2026 = Params{
 
 	minijobMax: 60_300,  // 603.00 EUR
 	midijobMax: 200_000, // 2,000.00 EUR
-	// VERIFY: F = 0.28 / (18.6 + 2.6 + 14.6 + 2.9 + 3.6)% = 0.28 / 0.423 = 0.66194, published as 0.6619.
-	midijobF: 6_619,
 
 	grundfreibetrag: 12_348,
 	zone2End:        17_799,
