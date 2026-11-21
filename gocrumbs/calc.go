@@ -43,13 +43,23 @@ type Expense struct {
 	Category string
 }
 
+// ExtraPay is a flat monthly payment on top of the salary, such as on-call pay (Rufbereitschaft).
+// It is paid with the salary: taxable and subject to social insurance, unless TaxFree
+// (e.g. Sunday and holiday surcharges under § 3b EStG), which is paid out in full.
+type ExtraPay struct {
+	Name    string
+	Amount  float64
+	TaxFree bool
+}
+
 // Input is everything the calculation needs. Money is EUR per month.
 type Input struct {
 	Year             int
 	WorkType         string // WorkFTE or WorkWerkstudent
 	GrossMain        float64
 	GrossSide        float64 // FTE only
-	SteuerKlasse     int     // 1-6
+	Extra            []ExtraPay
+	SteuerKlasse     int // 1-6
 	ChurchTax        bool
 	Bundesland       string // two-letter code
 	Children         int
@@ -75,7 +85,7 @@ type ExpenseTotals struct {
 type Result struct {
 	TaxYear int `json:"tax_year"`
 
-	Gross           float64 `json:"gross"`
+	Gross           float64 `json:"gross"` // everything paid out before deductions, tax-free extras included
 	RV              float64 `json:"rv"`
 	AV              float64 `json:"av"`
 	KV              float64 `json:"kv"`
@@ -83,6 +93,8 @@ type Result struct {
 	Lohnsteuer      float64 `json:"lohnsteuer"`
 	Soli            float64 `json:"soli"`
 	Kirchensteuer   float64 `json:"kirchensteuer"`
+	ExtraTaxable    float64 `json:"extra_taxable"` // taxable extra pay (already part of the main job's gross)
+	ExtraFree       float64 `json:"extra_free"`    // tax-free extra pay
 	TotalDeductions float64 `json:"total_deductions"`
 	Net             float64 `json:"net"`
 
@@ -139,6 +151,11 @@ func (in Input) validate() error {
 	}
 	for _, e := range append(append([]Expense{}, in.Subscriptions...), in.Custom...) {
 		if err := validAmount("expense amount", e.Amount, 1e6); err != nil {
+			return err
+		}
+	}
+	for _, e := range in.Extra {
+		if err := validAmount("extra pay amount", e.Amount, 1e6); err != nil {
 			return err
 		}
 	}
@@ -239,7 +256,17 @@ func Calculate(in Input) (Result, error) {
 		freibJahr = int64(in.Children-1) * p.entlastungWeiteresKind * 100
 	}
 
-	mainGross := toCents(in.GrossMain)
+	// Extra pay is paid with the salary, so taxable lines count as main-job gross (this is how
+	// a payslip adds them); tax-free lines only add to the payout.
+	var extraTaxable, extraFree int64
+	for _, e := range in.Extra {
+		if e.TaxFree {
+			extraFree += toCents(e.Amount)
+		} else {
+			extraTaxable += toCents(e.Amount)
+		}
+	}
+	mainGross := toCents(in.GrossMain) + extraTaxable
 	main := p.payslip(mainGross, in.SteuerKlasse, zkfTenths, freibJahr,
 		p.bbgRVAVMonth(), p.bbgKVPVMonth(), true, ctx)
 
@@ -250,7 +277,7 @@ func Calculate(in Input) (Result, error) {
 	headKV := p.bbgKVPVMonth() - min64(mainGross, p.bbgKVPVMonth())
 	side := p.payslip(sideGross, 6, 0, 0, headRV, headKV, false, ctx)
 
-	grossTotal := mainGross + sideGross
+	grossTotal := mainGross + sideGross // taxable gross
 	social := contribs{
 		rv: main.c.rv + side.c.rv, av: main.c.av + side.c.av,
 		kv: main.c.kv + side.c.kv, pv: main.c.pv + side.c.pv,
@@ -259,7 +286,7 @@ func Calculate(in Input) (Result, error) {
 	solz := main.solz + side.solz
 	kist := main.kist + side.kist
 	deductions := social.total() + lst + solz + kist
-	net := grossTotal - deductions
+	net := grossTotal + extraFree - deductions
 
 	subs, custom := sumExpenses(in.Subscriptions), sumExpenses(in.Custom)
 	rent, savings := toCents(in.Rent), toCents(in.Savings)
@@ -267,7 +294,7 @@ func Calculate(in Input) (Result, error) {
 
 	res := Result{
 		TaxYear:         p.Year,
-		Gross:           euro(grossTotal),
+		Gross:           euro(grossTotal + extraFree),
 		RV:              euro(social.rv),
 		AV:              euro(social.av),
 		KV:              euro(social.kv),
@@ -275,6 +302,8 @@ func Calculate(in Input) (Result, error) {
 		Lohnsteuer:      euro(lst),
 		Soli:            euro(solz),
 		Kirchensteuer:   euro(kist),
+		ExtraTaxable:    euro(extraTaxable),
+		ExtraFree:       euro(extraFree),
 		TotalDeductions: euro(deductions),
 		Net:             euro(net),
 		Expenses: ExpenseTotals{

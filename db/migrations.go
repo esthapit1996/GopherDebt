@@ -274,6 +274,17 @@ func RunMigrations(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_gocrumbs_expenses_user_id ON gocrumbs_expenses(user_id)`,
 		`ALTER TABLE gocrumbs_expenses ENABLE ROW LEVEL SECURITY`,
+		// GoCrumbs: flat monthly extra pay on top of the salary (e.g. on-call), taxable or tax-free
+		`CREATE TABLE IF NOT EXISTS gocrumbs_extra_pay (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name VARCHAR(60) NOT NULL,
+			amount DECIMAL(10, 2) NOT NULL CHECK (amount >= 0),
+			tax_free BOOLEAN NOT NULL DEFAULT FALSE,
+			position INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_gocrumbs_extra_pay_user_id ON gocrumbs_extra_pay(user_id)`,
+		`ALTER TABLE gocrumbs_extra_pay ENABLE ROW LEVEL SECURITY`,
 	}
 
 	for i, migration := range migrations {

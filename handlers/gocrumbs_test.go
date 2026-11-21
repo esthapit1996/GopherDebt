@@ -89,6 +89,15 @@ func TestBindGoCrumbs(t *testing.T) {
 		{"50 lines in total", goCrumbsBody(`"subscriptions":` + manyLines(25) + `,"custom_expenses":` + manyLines(25)), http.StatusOK},
 		{"51 lines in total", goCrumbsBody(`"subscriptions":` + manyLines(26) + `,"custom_expenses":` + manyLines(25)), http.StatusBadRequest},
 		{"51 subscriptions", goCrumbsBody(`"subscriptions":` + manyLines(51)), http.StatusBadRequest},
+		{"extra pay ok", goCrumbsBody(`"extra_pay":[{"name":"On-call","amount":500},{"name":"Sunday","amount":150,"tax_free":true}]`), http.StatusOK},
+		{"extra pay empty name", goCrumbsBody(`"extra_pay":[{"name":"","amount":5}]`), http.StatusBadRequest},
+		{"extra pay whitespace name", goCrumbsBody(`"extra_pay":[{"name":"  ","amount":5}]`), http.StatusBadRequest},
+		{"extra pay negative", goCrumbsBody(`"extra_pay":[{"name":"x","amount":-1}]`), http.StatusBadRequest},
+		{"extra pay too large", goCrumbsBody(`"extra_pay":[{"name":"x","amount":1000001}]`), http.StatusBadRequest},
+		{"extra pay name too long", goCrumbsBody(`"extra_pay":[{"name":"` + strings.Repeat("a", 61) + `","amount":5}]`), http.StatusBadRequest},
+		{"20 extra pay lines", goCrumbsBody(`"extra_pay":` + manyLines(20)), http.StatusOK},
+		{"21 extra pay lines", goCrumbsBody(`"extra_pay":` + manyLines(21)), http.StatusBadRequest},
+		{"extra pay omitted", goCrumbsBody(""), http.StatusOK},
 		{"invalid JSON", `{`, http.StatusBadRequest},
 	}
 	r := goCrumbsRouter()
@@ -113,14 +122,33 @@ func TestBindGoCrumbsTrimsNames(t *testing.T) {
 	}
 }
 
+func TestBindGoCrumbsTrimsExtraPayNames(t *testing.T) {
+	w := doJSON(goCrumbsRouter(), "POST", "/gocrumbs/bind",
+		goCrumbsBody(`"extra_pay":[{"name":"  On-call  ","amount":500}]`))
+	var got struct {
+		ExtraPay []struct {
+			Name    string
+			TaxFree bool `json:"tax_free"`
+		} `json:"extra_pay"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil || len(got.ExtraPay) != 1 {
+		t.Fatalf("bad response %s (%v)", w.Body.String(), err)
+	}
+	if got.ExtraPay[0].Name != "On-call" || got.ExtraPay[0].TaxFree {
+		t.Errorf("got %+v, want trimmed name and taxable by default", got.ExtraPay[0])
+	}
+}
+
 type goCrumbsResponse struct {
 	Success bool `json:"success"`
 	Data    struct {
-		TaxYear int      `json:"tax_year"`
-		Gross   float64  `json:"gross"`
-		Net     float64  `json:"net"`
-		Left    float64  `json:"left"`
-		Notes   []string `json:"notes"`
+		TaxYear      int      `json:"tax_year"`
+		Gross        float64  `json:"gross"`
+		ExtraTaxable float64  `json:"extra_taxable"`
+		ExtraFree    float64  `json:"extra_free"`
+		Net          float64  `json:"net"`
+		Left         float64  `json:"left"`
+		Notes        []string `json:"notes"`
 	} `json:"data"`
 	Error string `json:"error"`
 }
@@ -200,5 +228,17 @@ func TestGoCrumbsTaxYear(t *testing.T) {
 		if got := goCrumbsTaxYear(at(now)); got != want {
 			t.Errorf("goCrumbsTaxYear(%d) = %d, want %d", now, got, want)
 		}
+	}
+}
+
+// 4,000 gross plus a taxable 500 on-call line equals 4,500 gross; a tax-free 150 is added to the payout.
+func TestCalculateGoCrumbsExtraPay(t *testing.T) {
+	_, salary := calcResponse(t, strings.Replace(goCrumbsBody(""), `"gross_amount":4000`, `"gross_amount":4500`, 1))
+	code, resp := calcResponse(t, goCrumbsBody(`"extra_pay":[{"name":"On-call","amount":500},{"name":"Sunday","amount":150,"tax_free":true}]`))
+	if code != http.StatusOK || !resp.Success {
+		t.Fatalf("status %d: %+v", code, resp)
+	}
+	if resp.Data.Net != salary.Data.Net+150 || resp.Data.Gross != 4650 || resp.Data.ExtraTaxable != 500 || resp.Data.ExtraFree != 150 {
+		t.Errorf("got %+v, want net %v, gross 4650, extras 500 / 150", resp.Data, salary.Data.Net+150)
 	}
 }

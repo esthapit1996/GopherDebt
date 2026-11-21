@@ -401,12 +401,12 @@ type GoCrumbsHandler struct {
 | Method | Endpoint | Function | Description |
 |--------|----------|----------|-------------|
 | GET | `/api/gocrumbs` | `GetGoCrumbs` | The user's saved profile; a first-time user gets `success: true` without `data` (not a 404) |
-| PUT | `/api/gocrumbs` | `SaveGoCrumbs` | Validates, checks that the profile is calculable, then saves it (profile + expense lines) and returns it |
+| PUT | `/api/gocrumbs` | `SaveGoCrumbs` | Validates, checks that the profile is calculable, then saves it (profile, expense lines and extra pay lines) and returns it |
 | POST | `/api/gocrumbs/calculate` | `CalculateGoCrumbs` | Stateless: same body as PUT, returns the breakdown, never touches the database |
 
 ### How it works
 
-- `bindGoCrumbs` binds the body (ranges are in `models.GoCrumbsRequest`), trims expense names and rejects blank ones, and caps the lines at 50 in total.
+- `bindGoCrumbs` binds the body (ranges are in `models.GoCrumbsRequest`), trims expense and extra pay names and rejects blank ones, and caps expense lines at 50 in total and extra pay lines at 20.
 - `goCrumbsInput` converts the profile to the engine's input (yearly gross becomes monthly). `calculateGoCrumbs` runs `gocrumbs.Calculate`; engine validation failures (`ErrInvalidInput`, e.g. side income for a Werkstudent) become a `400`.
 - PUT calculates before saving, so every saved profile can be shown again.
 - The tax year is the latest one the engine supports that is not after the current year (`goCrumbsTaxYear`). It is returned as `tax_year` so the UI can say which year was used.

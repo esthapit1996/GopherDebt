@@ -60,6 +60,23 @@ func bindGoCrumbs(c *gin.Context) (*models.GoCrumbsRequest, bool) {
 			}
 		}
 	}
+	for i := range req.ExtraPay {
+		req.ExtraPay[i].Name = strings.TrimSpace(req.ExtraPay[i].Name)
+		if req.ExtraPay[i].Name == "" {
+			c.JSON(http.StatusBadRequest, models.APIResponse{
+				Success: false,
+				Error:   "Extra pay name is required",
+			})
+			return nil, false
+		}
+	}
+	if len(req.ExtraPay) > db.MaxGoCrumbsExtraPayLines {
+		c.JSON(http.StatusBadRequest, models.APIResponse{
+			Success: false,
+			Error:   "Too many extra pay lines",
+		})
+		return nil, false
+	}
 	if len(req.Subscriptions)+len(req.CustomExpenses) > db.MaxGoCrumbsLines {
 		c.JSON(http.StatusBadRequest, models.APIResponse{
 			Success: false,
@@ -83,11 +100,16 @@ func goCrumbsInput(req *models.GoCrumbsRequest, year int) gocrumbs.Input {
 		}
 		return out
 	}
+	extra := make([]gocrumbs.ExtraPay, len(req.ExtraPay))
+	for i, l := range req.ExtraPay {
+		extra[i] = gocrumbs.ExtraPay{Name: l.Name, Amount: l.Amount, TaxFree: l.TaxFree}
+	}
 	return gocrumbs.Input{
 		Year:             year,
 		WorkType:         req.WorkType,
 		GrossMain:        monthly,
 		GrossSide:        req.SideGross,
+		Extra:            extra,
 		SteuerKlasse:     req.SteuerKlasse,
 		ChurchTax:        req.ChurchTax,
 		Bundesland:       req.Bundesland,

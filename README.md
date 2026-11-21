@@ -337,10 +337,14 @@ Authorization: Bearer <token>
   "rent": 900,
   "savings": 300,
   "subscriptions": [{ "name": "Netflix", "amount": 12.99, "category": "media" }],
-  "custom_expenses": [{ "name": "Phone", "amount": 20 }]
+  "custom_expenses": [{ "name": "Phone", "amount": 20 }],
+  "extra_pay": [
+    { "name": "On-call", "amount": 500 },
+    { "name": "Sunday surcharge", "amount": 150, "tax_free": true }
+  ]
 }
 ```
-`work_type` is `fte` or `werkstudent` (a Werkstudent can't have `side_gross`). `gross_period` is `month` or `year`; every other amount is EUR per month. `bundesland` is the two-letter code, `zusatzbeitrag` the health insurer's rate in % (0-10). At most 50 expense lines in total, names up to 60 characters. `POST /api/gocrumbs/calculate` takes the same body and returns the breakdown: `gross`, `rv`, `av`, `kv`, `pv`, `lohnsteuer`, `soli`, `kirchensteuer`, `net`, `expenses`, `left`, the rates and `notes`.
+`work_type` is `fte` or `werkstudent` (a Werkstudent can't have `side_gross`). `gross_period` is `month` or `year`; every other amount is EUR per month. `bundesland` is the two-letter code, `zusatzbeitrag` the health insurer's rate in % (0-10). At most 50 expense lines in total and 20 `extra_pay` lines, names up to 60 characters. `extra_pay` is flat monthly pay on top of the salary (e.g. on-call): taxable and subject to social insurance like salary, or paid out in full when `tax_free` is true. `POST /api/gocrumbs/calculate` takes the same body and returns the breakdown: `gross` (incl. tax-free extras), `extra_taxable`, `extra_free`, `rv`, `av`, `kv`, `pv`, `lohnsteuer`, `soli`, `kirchensteuer`, `net`, `expenses`, `left`, the rates and `notes`.
 
 ### Scan Receipt
 ```
@@ -371,7 +375,7 @@ Max 14 MB (413 if larger), to keep server memory bounded. JPEG, PNG, WEBP or GIF
 │   ├── stash.go           # GopherStash personal expenses
 │   ├── wish.go            # GoWish personal wishlist
 │   ├── wish_lists.go      # GoWish shared wish groups
-│   ├── gocrumbs.go        # GoCrumbs budget profile + expense lines
+│   ├── gocrumbs.go        # GoCrumbs budget profile, expense + extra pay lines
 │   ├── access_control.go  # Email whitelist/blacklist
 │   └── retry.go           # Generic retry with backoff for transient DB errors
 ├── handlers/

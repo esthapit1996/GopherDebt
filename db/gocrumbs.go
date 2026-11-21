@@ -6,8 +6,12 @@ import (
 	"gopherdebt/models"
 )
 
-// MaxGoCrumbsLines is the most expense lines (subscriptions + custom) one profile may hold
-const MaxGoCrumbsLines = 50
+const (
+	// MaxGoCrumbsLines is the most expense lines (subscriptions + custom) one profile may hold
+	MaxGoCrumbsLines = 50
+	// MaxGoCrumbsExtraPayLines is the most extra pay lines one profile may hold
+	MaxGoCrumbsExtraPayLines = 20
+)
 
 const goCrumbsColumns = `work_type, gross_amount, gross_period, side_gross, steuerklasse, church_tax,
 	bundesland, children, under_23, zusatzbeitrag, rent, savings, updated_at`
@@ -50,11 +54,31 @@ func GetGoCrumbsProfile(d *sql.DB, userID int) (*models.GoCrumbsProfile, error) 
 				p.CustomExpenses = append(p.CustomExpenses, line)
 			}
 		}
-		return &p, rows.Err()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+
+		p.ExtraPay = []models.GoCrumbsExtraPayLine{}
+		extraRows, err := d.Query(
+			`SELECT name, amount, tax_free FROM gocrumbs_extra_pay
+			 WHERE user_id = $1 ORDER BY position, id`, userID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		defer extraRows.Close()
+		for extraRows.Next() {
+			var line models.GoCrumbsExtraPayLine
+			if err := extraRows.Scan(&line.Name, &line.Amount, &line.TaxFree); err != nil {
+				return nil, err
+			}
+			p.ExtraPay = append(p.ExtraPay, line)
+		}
+		return &p, extraRows.Err()
 	})
 }
 
-// SaveGoCrumbsProfile creates or replaces the user's profile and its expense lines in one
+// SaveGoCrumbsProfile creates or replaces the user's profile, expense lines and extra pay lines in one
 // transaction. The profile upsert comes first and holds the row lock until commit, so two
 // parallel saves by the same user run one after the other and can't duplicate expense lines.
 func SaveGoCrumbsProfile(d *sql.DB, userID int, req *models.GoCrumbsRequest) (*models.GoCrumbsProfile, error) {
@@ -95,6 +119,20 @@ func SaveGoCrumbsProfile(d *sql.DB, userID int, req *models.GoCrumbsRequest) (*m
 			if err != nil {
 				return nil, err
 			}
+		}
+	}
+
+	if _, err := tx.Exec(`DELETE FROM gocrumbs_extra_pay WHERE user_id = $1`, userID); err != nil {
+		return nil, err
+	}
+	for i, line := range req.ExtraPay {
+		_, err := tx.Exec(
+			`INSERT INTO gocrumbs_extra_pay (user_id, name, amount, tax_free, position)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			userID, line.Name, line.Amount, line.TaxFree, i,
+		)
+		if err != nil {
+			return nil, err
 		}
 	}
 	if err := tx.Commit(); err != nil {

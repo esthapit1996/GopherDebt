@@ -27,6 +27,7 @@ res, err := gocrumbs.Calculate(gocrumbs.Input{
 ```
 
 - Money is EUR per month. Inside the engine everything is `int64` cents; each contribution line is rounded once (half up). Lohnsteuer follows the PAP's own truncation.
+- `Input.Extra` is flat monthly pay on top of the salary (e.g. on-call). Taxable lines are added to the main job's gross, which is how a payslip adds them; `TaxFree` lines (§ 3b EStG surcharges) only add to the payout. `Result.Gross` is everything paid out, `ExtraTaxable` and `ExtraFree` show the two sums.
 - `Result.Notes` holds warning codes (`minijob_main`, `midijob_reduced`, `bbg_capped`, ...) for the UI to translate.
 - Validation failures wrap `ErrInvalidInput`. An unsupported `Year` is an error: the engine never falls back to another year.
 

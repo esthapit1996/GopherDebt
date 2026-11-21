@@ -217,6 +217,7 @@ func DeleteUser(d *sql.DB, userID int) error {
 		{`DELETE FROM stash_expenses WHERE user_id = $1`, []any{userID}},
 		{`DELETE FROM wish_items WHERE user_id = $1`, []any{userID}},
 		{`DELETE FROM gocrumbs_expenses WHERE user_id = $1`, []any{userID}},
+		{`DELETE FROM gocrumbs_extra_pay WHERE user_id = $1`, []any{userID}},
 		{`DELETE FROM gocrumbs_profiles WHERE user_id = $1`, []any{userID}},
 		{`DELETE FROM wish_list_members WHERE user_id = $1`, []any{userID}},
 		{`DELETE FROM wish_lists wl WHERE NOT EXISTS (SELECT 1 FROM wish_list_members m WHERE m.list_id = wl.id)`, nil},
