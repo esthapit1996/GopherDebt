@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -89,6 +90,15 @@ func TestBindGoCrumbs(t *testing.T) {
 		{"50 lines in total", goCrumbsBody(`"subscriptions":` + manyLines(25) + `,"custom_expenses":` + manyLines(25)), http.StatusOK},
 		{"51 lines in total", goCrumbsBody(`"subscriptions":` + manyLines(26) + `,"custom_expenses":` + manyLines(25)), http.StatusBadRequest},
 		{"51 subscriptions", goCrumbsBody(`"subscriptions":` + manyLines(51)), http.StatusBadRequest},
+		{"ws wage at limit", goCrumbsBody(`"ws_hourly_wage":1000`), http.StatusOK},
+		{"ws wage too high", goCrumbsBody(`"ws_hourly_wage":1001`), http.StatusBadRequest},
+		{"ws wage negative", goCrumbsBody(`"ws_hourly_wage":-1`), http.StatusBadRequest},
+		{"ws hours per month at limit", goCrumbsBody(`"ws_hours":744`), http.StatusOK},
+		{"ws hours per month too high", goCrumbsBody(`"ws_hours":745`), http.StatusBadRequest},
+		{"ws hours per week at limit", goCrumbsBody(`"ws_hours_period":"week","ws_hours":168`), http.StatusOK},
+		{"ws hours per week too high", goCrumbsBody(`"ws_hours_period":"week","ws_hours":169`), http.StatusBadRequest},
+		{"ws hours negative", goCrumbsBody(`"ws_hours":-1`), http.StatusBadRequest},
+		{"ws hours period invalid", goCrumbsBody(`"ws_hours_period":"year"`), http.StatusBadRequest},
 		{"extra pay ok", goCrumbsBody(`"extra_pay":[{"name":"On-call","amount":500},{"name":"Sunday","amount":150,"tax_free":true}]`), http.StatusOK},
 		{"extra pay empty name", goCrumbsBody(`"extra_pay":[{"name":"","amount":5}]`), http.StatusBadRequest},
 		{"extra pay whitespace name", goCrumbsBody(`"extra_pay":[{"name":"  ","amount":5}]`), http.StatusBadRequest},
@@ -187,11 +197,9 @@ func TestCalculateGoCrumbsYearlyGross(t *testing.T) {
 }
 
 func TestCalculateGoCrumbsEngineRejections(t *testing.T) {
-	// Passes the binding rules but not the engine's: Werkstudent can't have side income,
-	// and 300,000 per month is above the engine's range.
+	// Passes the binding rules but not the engine's: 2,000,000 per month is above its range.
 	cases := map[string]string{
-		"werkstudent with side income": strings.Replace(goCrumbsBody(`"side_gross":100`), `"fte"`, `"werkstudent"`, 1),
-		"monthly gross above range":    strings.Replace(goCrumbsBody(""), `"gross_amount":4000`, `"gross_amount":2000000`, 1),
+		"monthly gross above range": strings.Replace(goCrumbsBody(""), `"gross_amount":4000`, `"gross_amount":2000000`, 1),
 	}
 	for name, body := range cases {
 		code, resp := calcResponse(t, body)
@@ -206,7 +214,7 @@ func TestSaveGoCrumbsRejectsInvalidBeforeDB(t *testing.T) {
 	r := goCrumbsRouter()
 	bodies := []string{
 		`{}`,
-		strings.Replace(goCrumbsBody(`"side_gross":100`), `"fte"`, `"werkstudent"`, 1),
+		goCrumbsBody(`"ws_hours_period":"week","ws_hours":169`),
 		goCrumbsBody(`"subscriptions":[{"name":" ","amount":5}]`),
 	}
 	for _, body := range bodies {
@@ -240,5 +248,61 @@ func TestCalculateGoCrumbsExtraPay(t *testing.T) {
 	}
 	if resp.Data.Net != salary.Data.Net+150 || resp.Data.Gross != 4650 || resp.Data.ExtraTaxable != 500 || resp.Data.ExtraFree != 150 {
 		t.Errorf("got %+v, want net %v, gross 4650, extras 500 / 150", resp.Data, salary.Data.Net+150)
+	}
+}
+
+func TestBindGoCrumbsDefaultsHoursPeriod(t *testing.T) {
+	w := doJSON(goCrumbsRouter(), "POST", "/gocrumbs/bind", goCrumbsBody(`"ws_hours":80`))
+	var got struct {
+		WsHoursPeriod string `json:"ws_hours_period"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil || got.WsHoursPeriod != "month" {
+		t.Errorf("ws_hours_period = %q (%v), want month", got.WsHoursPeriod, err)
+	}
+}
+
+// werkstudentBody is a Werkstudent profile (class I, Berlin, Zusatzbeitrag 2.69%). The employee
+// fields (gross, side income, extra pay) are set to values that must not count.
+func werkstudentBody(extra string) string {
+	body := `{"work_type":"werkstudent","gross_amount":4916.67,"gross_period":"month","side_gross":500,` +
+		`"extra_pay":[{"name":"On-call","amount":500}],"steuerklasse":1,"bundesland":"BE","zusatzbeitrag":2.69`
+	if extra != "" {
+		body += "," + extra
+	}
+	return body + "}"
+}
+
+// A June 2026 Werkstudent payslip: 80 hours at 17.00 = 1,360.00 gross, payout 1,244.30.
+func TestCalculateGoCrumbsWerkstudentHours(t *testing.T) {
+	code, resp := calcResponse(t, werkstudentBody(`"ws_hourly_wage":17,"ws_hours":80,"ws_hours_period":"month"`))
+	if code != http.StatusOK || !resp.Success {
+		t.Fatalf("status %d: %+v", code, resp)
+	}
+	if resp.Data.Gross != 1360 || resp.Data.Net != 1244.30 || resp.Data.ExtraTaxable != 0 {
+		t.Errorf("got %+v, want gross 1360, net 1244.30, no extra pay", resp.Data)
+	}
+}
+
+// 20 hours a week at 17.00 = 340.00 a week = 1,473.33 in an average month (52/12 weeks)
+func TestCalculateGoCrumbsWerkstudentWeeklyHours(t *testing.T) {
+	_, resp := calcResponse(t, werkstudentBody(`"ws_hourly_wage":17,"ws_hours":20,"ws_hours_period":"week"`))
+	if resp.Data.Gross != 1473.33 {
+		t.Errorf("gross = %v, want 1473.33", resp.Data.Gross)
+	}
+}
+
+// Switching work type must not matter for the other type: a Werkstudent ignores gross, side income
+// and extra pay, an employee ignores wage and hours.
+func TestCalculateGoCrumbsWorkTypesAreSeparate(t *testing.T) {
+	_, plain := calcResponse(t, `{"work_type":"werkstudent","gross_amount":0,"gross_period":"month","steuerklasse":1,"bundesland":"BE","zusatzbeitrag":2.69,"ws_hourly_wage":17,"ws_hours":80}`)
+	_, withEmployeeData := calcResponse(t, werkstudentBody(`"ws_hourly_wage":17,"ws_hours":80`))
+	if !reflect.DeepEqual(plain.Data, withEmployeeData.Data) || plain.Data.Net != 1244.30 {
+		t.Errorf("employee fields leaked into a Werkstudent: %+v vs %+v", plain.Data, withEmployeeData.Data)
+	}
+
+	_, fte := calcResponse(t, goCrumbsBody(""))
+	_, fteWithStudentData := calcResponse(t, goCrumbsBody(`"ws_hourly_wage":17,"ws_hours":80`))
+	if !reflect.DeepEqual(fte.Data, fteWithStudentData.Data) || fte.Data.Net != 2605.5 {
+		t.Errorf("Werkstudent fields leaked into an employee: %+v vs %+v", fte.Data, fteWithStudentData.Data)
 	}
 }

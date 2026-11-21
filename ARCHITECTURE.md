@@ -253,8 +253,11 @@ Starts listening for HTTP requests.
 │ under_23          │          | custom
 │ zusatzbeitrag     │
 │ rent, savings     │   Inputs only: net pay and "left"
-│ updated_at        │   are always recalculated
-└───────────────────┘
+│ ws_hourly_wage    │   are always recalculated
+│ ws_hours          │
+│ ws_hours_period   │   Werkstudent income has its own
+│ updated_at        │   columns, apart from the gross
+└───────────────────┘   fields of an employee
 ```
 
 ---

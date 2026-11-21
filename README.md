@@ -328,6 +328,9 @@ Authorization: Bearer <token>
   "gross_amount": 4000,
   "gross_period": "month",
   "side_gross": 0,
+  "ws_hourly_wage": 0,
+  "ws_hours": 0,
+  "ws_hours_period": "month",
   "steuerklasse": 1,
   "church_tax": false,
   "bundesland": "NW",
@@ -344,7 +347,7 @@ Authorization: Bearer <token>
   ]
 }
 ```
-`work_type` is `fte` or `werkstudent` (a Werkstudent can't have `side_gross`). `gross_period` is `month` or `year`; every other amount is EUR per month. `bundesland` is the two-letter code, `zusatzbeitrag` the health insurer's rate in % (0-10). At most 50 expense lines in total and 20 `extra_pay` lines, names up to 60 characters. `extra_pay` is flat monthly pay on top of the salary (e.g. on-call): taxable and subject to social insurance like salary, or paid out in full when `tax_free` is true. `POST /api/gocrumbs/calculate` takes the same body and returns the breakdown: `gross` (incl. tax-free extras), `extra_taxable`, `extra_free`, `rv`, `av`, `kv`, `pv`, `lohnsteuer`, `soli`, `kirchensteuer`, `net`, `expenses`, `left`, the rates and `notes`.
+`work_type` is `fte` or `werkstudent` and decides which income fields count: an employee earns `gross_amount` (with `side_gross` and `extra_pay`), a Werkstudent earns `ws_hourly_wage` × `ws_hours` (`ws_hours_period` is `month` or `week`; a week counts as 52/12 per month) and has no side income or extra pay. Both sets are stored, so switching `work_type` never overwrites the other one. `gross_period` is `month` or `year`; every other amount is EUR per month. `bundesland` is the two-letter code, `zusatzbeitrag` the health insurer's rate in % (0-10). At most 50 expense lines in total and 20 `extra_pay` lines, names up to 60 characters. `extra_pay` is flat monthly pay on top of the salary (e.g. on-call): taxable and subject to social insurance like salary, or paid out in full when `tax_free` is true. `POST /api/gocrumbs/calculate` takes the same body and returns the breakdown: `gross` (incl. tax-free extras), `extra_taxable`, `extra_free`, `rv`, `av`, `kv`, `pv`, `lohnsteuer`, `soli`, `kirchensteuer`, `net`, `expenses`, `left`, the rates and `notes`.
 
 ### Scan Receipt
 ```

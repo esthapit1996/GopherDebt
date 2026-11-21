@@ -264,7 +264,10 @@ A GoCrumbs budget profile, used to save it and to calculate. Inputs only, never 
 | `WorkType` | `string` | `required,oneof=fte werkstudent` | Full-time employee or Werkstudent |
 | `GrossAmount` | `float64` | `gte=0,max=10000000` | Gross income per `GrossPeriod` |
 | `GrossPeriod` | `string` | `required,oneof=month year` | Whether `GrossAmount` is monthly or yearly |
-| `SideGross` | `float64` | `gte=0,max=100000` | Gross side income per month (employees only; rejected for a Werkstudent) |
+| `SideGross` | `float64` | `gte=0,max=100000` | Gross side income per month (employees only; ignored for a Werkstudent, but kept) |
+| `WsHourlyWage` | `float64` | `gte=0,max=1000` | Werkstudent hourly wage in EUR. Own field: switching work type never overwrites the employee's gross |
+| `WsHours` | `float64` | `gte=0,max=744` | Werkstudent hours worked per `WsHoursPeriod` (at most 168 a week, checked in the handler) |
+| `WsHoursPeriod` | `string` | `omitempty,oneof=week month` | Whether `WsHours` is per week or per month. Defaults to `month` |
 | `SteuerKlasse` | `int` | `required,min=1,max=6` | Tax class |
 | `ChurchTax` | `bool` | | Pays church tax |
 | `Bundesland` | `string` | `required,oneof=` the 16 codes | Sets the church tax rate (8% BW/BY, else 9%) and the Sachsen care-insurance rule |

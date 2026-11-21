@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -60,6 +61,16 @@ func bindGoCrumbs(c *gin.Context) (*models.GoCrumbsRequest, bool) {
 			}
 		}
 	}
+	if req.WsHoursPeriod == "" {
+		req.WsHoursPeriod = "month"
+	}
+	if req.WsHoursPeriod == "week" && req.WsHours > maxWeeklyHours {
+		c.JSON(http.StatusBadRequest, models.APIResponse{
+			Success: false,
+			Error:   "Invalid request: a week has at most 168 hours",
+		})
+		return nil, false
+	}
 	for i := range req.ExtraPay {
 		req.ExtraPay[i].Name = strings.TrimSpace(req.ExtraPay[i].Name)
 		if req.ExtraPay[i].Name == "" {
@@ -87,11 +98,39 @@ func bindGoCrumbs(c *gin.Context) (*models.GoCrumbsRequest, bool) {
 	return &req, true
 }
 
-// goCrumbsInput turns a profile into engine input; yearly gross is converted to monthly
+// maxWeeklyHours is the hours in a week; a month is capped at 744 (31 days) by the model
+const maxWeeklyHours = 168
+
+// weeksPerMonth turns weekly hours into the hours of an average month (52 weeks / 12 months)
+const weeksPerMonth = 52.0 / 12.0
+
+// werkstudentGross is a Werkstudent's monthly gross from the hourly wage and the hours worked
+func werkstudentGross(req *models.GoCrumbsRequest) float64 {
+	hours := req.WsHours
+	if req.WsHoursPeriod == "week" {
+		hours *= weeksPerMonth
+	}
+	return math.Round(req.WsHourlyWage*hours*100) / 100
+}
+
+// goCrumbsInput turns a profile into engine input. Only the fields of the chosen work type
+// count: a Werkstudent earns wage x hours and has no side income or extra pay, an employee earns
+// the gross amount (yearly gross is converted to monthly). The other type's fields stay stored
+// untouched so switching back finds them again.
 func goCrumbsInput(req *models.GoCrumbsRequest, year int) gocrumbs.Input {
 	monthly := req.GrossAmount
 	if req.GrossPeriod == "year" {
 		monthly /= 12
+	}
+	side := req.SideGross
+	extra := make([]gocrumbs.ExtraPay, len(req.ExtraPay))
+	for i, l := range req.ExtraPay {
+		extra[i] = gocrumbs.ExtraPay{Name: l.Name, Amount: l.Amount, TaxFree: l.TaxFree}
+	}
+	if req.WorkType == gocrumbs.WorkWerkstudent {
+		monthly = werkstudentGross(req)
+		side = 0
+		extra = nil
 	}
 	lines := func(in []models.GoCrumbsExpenseLine) []gocrumbs.Expense {
 		out := make([]gocrumbs.Expense, len(in))
@@ -100,15 +139,11 @@ func goCrumbsInput(req *models.GoCrumbsRequest, year int) gocrumbs.Input {
 		}
 		return out
 	}
-	extra := make([]gocrumbs.ExtraPay, len(req.ExtraPay))
-	for i, l := range req.ExtraPay {
-		extra[i] = gocrumbs.ExtraPay{Name: l.Name, Amount: l.Amount, TaxFree: l.TaxFree}
-	}
 	return gocrumbs.Input{
 		Year:             year,
 		WorkType:         req.WorkType,
 		GrossMain:        monthly,
-		GrossSide:        req.SideGross,
+		GrossSide:        side,
 		Extra:            extra,
 		SteuerKlasse:     req.SteuerKlasse,
 		ChurchTax:        req.ChurchTax,
