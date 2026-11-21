@@ -156,7 +156,7 @@ const DeletedUserName = "Deleted user"
 // DeleteUser anonymizes an account instead of removing it, so everyone else's balances and the
 // groups' history stay correct:
 //   - the row is kept, renamed "Deleted user", with an unusable email/password and every token revoked
-//   - personal data goes: GopherStash, wishes, wish-group memberships (a wish group left with no
+//   - personal data goes: GopherStash, GoCrumbs, wishes, wish-group memberships (a wish group left with no
 //     members is deleted, as when the last member leaves) and the whitelist entry for their email
 //   - they leave every debt group where they're settled; where they still owe or are owed money they
 //     stay as "Deleted user" so the others can still record settling up with them
@@ -216,6 +216,8 @@ func DeleteUser(d *sql.DB, userID int) error {
 		{`DELETE FROM email_whitelist WHERE LOWER(email) = LOWER($1)`, []any{email}},
 		{`DELETE FROM stash_expenses WHERE user_id = $1`, []any{userID}},
 		{`DELETE FROM wish_items WHERE user_id = $1`, []any{userID}},
+		{`DELETE FROM gocrumbs_expenses WHERE user_id = $1`, []any{userID}},
+		{`DELETE FROM gocrumbs_profiles WHERE user_id = $1`, []any{userID}},
 		{`DELETE FROM wish_list_members WHERE user_id = $1`, []any{userID}},
 		{`DELETE FROM wish_lists wl WHERE NOT EXISTS (SELECT 1 FROM wish_list_members m WHERE m.list_id = wl.id)`, nil},
 		{`DELETE FROM group_members WHERE user_id = $1 AND group_id = ANY($2)`, []any{userID, pq.Array(settled)}},

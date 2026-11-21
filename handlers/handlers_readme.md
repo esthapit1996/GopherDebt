@@ -34,9 +34,10 @@ Handlers are the **HTTP endpoint controllers**. They receive requests from the f
 | `wish_lookup.go` | Product link → name/price for the Add wish form | `/api/wish/lookup` |
 | `ai_guard.go` | AI guardrails shared by receipts and wish lookups | — |
 | `wish_lists.go` | GoWish shared wish groups | `/api/wish-lists/*` |
+| `gocrumbs.go` | GoCrumbs budget calculator (uses package `gocrumbs`) | `/api/gocrumbs`, `/api/gocrumbs/calculate` |
 | `access_control.go` | Email whitelist/blacklist | `/api/whitelist/*`, `/api/blacklist/*` |
 | `receipt.go` | AI receipt scanning | `/api/receipt/scan` |
-| `handlers_test.go`, `stash_test.go`, `wish_test.go`, `wish_lists_test.go`, `receipt_test.go` | Handler tests | — |
+| `handlers_test.go`, `stash_test.go`, `wish_test.go`, `wish_lists_test.go`, `gocrumbs_test.go`, `receipt_test.go` | Handler tests | — |
 
 ---
 
@@ -72,7 +73,7 @@ type UserHandler struct {
 
 ### Deleting a user
 
-Accounts are anonymized, not removed, so other people's balances and group history stay correct. The row is renamed "Deleted user", gets an unusable email (`deleted-<id>@deleted.invalid`) and password, and all its tokens are revoked. GopherStash, wishes, wish-group memberships and the whitelist entry are removed. The user leaves every debt group where they're settled. Where they still owe or are owed money they stay as "Deleted user", so the others can still record settling up. Groups they created and all money records are kept.
+Accounts are anonymized, not removed, so other people's balances and group history stay correct. The row is renamed "Deleted user", gets an unusable email (`deleted-<id>@deleted.invalid`) and password, and all its tokens are revoked. GopherStash, GoCrumbs, wishes, wish-group memberships and the whitelist entry are removed. The user leaves every debt group where they're settled. Where they still owe or are owed money they stay as "Deleted user", so the others can still record settling up. Groups they created and all money records are kept.
 
 ### Helper Functions
 
@@ -382,6 +383,34 @@ Shared GoWish groups, separate from debt groups. Every member has full access: r
 - Item queries filter on both item ID and `list_id`, so an item from another group can't be edited by guessing its ID.
 - Each wish belongs to the member who added it (`user_id`), which is their section in the group. Edits by other members don't change the owner.
 - When a member leaves or is removed, their wishes in that group are deleted. When the last member leaves, the group is deleted too (in one transaction with a row lock, so two members leaving at once can't leave an orphan group).
+
+---
+
+## 🔧 gocrumbs.go
+
+### Handler Struct
+
+```go
+type GoCrumbsHandler struct {
+    DB *sql.DB
+}
+```
+
+### Endpoints
+
+| Method | Endpoint | Function | Description |
+|--------|----------|----------|-------------|
+| GET | `/api/gocrumbs` | `GetGoCrumbs` | The user's saved profile; a first-time user gets `success: true` without `data` (not a 404) |
+| PUT | `/api/gocrumbs` | `SaveGoCrumbs` | Validates, checks that the profile is calculable, then saves it (profile + expense lines) and returns it |
+| POST | `/api/gocrumbs/calculate` | `CalculateGoCrumbs` | Stateless: same body as PUT, returns the breakdown, never touches the database |
+
+### How it works
+
+- `bindGoCrumbs` binds the body (ranges are in `models.GoCrumbsRequest`), trims expense names and rejects blank ones, and caps the lines at 50 in total.
+- `goCrumbsInput` converts the profile to the engine's input (yearly gross becomes monthly). `calculateGoCrumbs` runs `gocrumbs.Calculate`; engine validation failures (`ErrInvalidInput`, e.g. side income for a Werkstudent) become a `400`.
+- PUT calculates before saving, so every saved profile can be shown again.
+- The tax year is the latest one the engine supports that is not after the current year (`goCrumbsTaxYear`). It is returned as `tax_year` so the UI can say which year was used.
+- The database stores inputs only; results are never stored, so a tax-year update corrects everyone's numbers.
 
 ---
 

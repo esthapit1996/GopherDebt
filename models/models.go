@@ -274,6 +274,38 @@ type WishItemRequest struct {
 	Cost *float64 `json:"cost" binding:"omitempty,gt=0"`
 }
 
+// GoCrumbsExpenseLine is one named monthly expense (a subscription or a custom line)
+type GoCrumbsExpenseLine struct {
+	Name     string  `json:"name" binding:"required,max=60"`
+	Amount   float64 `json:"amount" binding:"gte=0,max=1000000"`
+	Category string  `json:"category" binding:"max=30"`
+}
+
+// GoCrumbsRequest is a GoCrumbs budget profile: the user's inputs, never computed results.
+// Gross amounts are per GrossPeriod ("month" or "year"); everything else is EUR per month.
+type GoCrumbsRequest struct {
+	WorkType       string                `json:"work_type" binding:"required,oneof=fte werkstudent"`
+	GrossAmount    float64               `json:"gross_amount" binding:"gte=0,max=10000000"`
+	GrossPeriod    string                `json:"gross_period" binding:"required,oneof=month year"`
+	SideGross      float64               `json:"side_gross" binding:"gte=0,max=100000"`
+	SteuerKlasse   int                   `json:"steuerklasse" binding:"required,min=1,max=6"`
+	ChurchTax      bool                  `json:"church_tax"`
+	Bundesland     string                `json:"bundesland" binding:"required,oneof=BW BY BE BB HB HH HE MV NI NW RP SL SN ST SH TH"`
+	Children       int                   `json:"children" binding:"min=0,max=20"`
+	Under23        bool                  `json:"under_23"`
+	Zusatzbeitrag  float64               `json:"zusatzbeitrag" binding:"gte=0,max=10"`
+	Rent           float64               `json:"rent" binding:"gte=0,max=1000000"`
+	Savings        float64               `json:"savings" binding:"gte=0,max=1000000"`
+	Subscriptions  []GoCrumbsExpenseLine `json:"subscriptions" binding:"max=50,dive"`
+	CustomExpenses []GoCrumbsExpenseLine `json:"custom_expenses" binding:"max=50,dive"`
+}
+
+// GoCrumbsProfile is a saved GoCrumbs profile
+type GoCrumbsProfile struct {
+	GoCrumbsRequest
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // APIResponse is a standard API response wrapper
 type APIResponse struct {
 	Success bool        `json:"success"`

@@ -40,13 +40,14 @@ GopherDebt/
 │   ├── stash.go         # GopherStash personal expenses
 │   ├── wish.go          # GoWish personal wishlist
 │   ├── wish_lists.go    # GoWish shared wish groups
+│   ├── gocrumbs.go      # GoCrumbs budget profile + expense lines
 │   ├── access_control.go # Email whitelist/blacklist
 │   ├── retry.go         # Generic retry with backoff
 │   ├── migrations.go    # Schema creation
 │   └── security.go      # Supabase REST API lockdown, unique emails
 ├── handlers/            # HTTP endpoint controllers
 │   ├── handlers_readme.md   # 📖 Documentation
-│   ├── handlers_test.go # Handler tests (+ stash_test.go, wish_test.go, wish_lists_test.go)
+│   ├── handlers_test.go # Handler tests (+ stash_test.go, wish_test.go, wish_lists_test.go, gocrumbs_test.go)
 │   ├── users.go         # Auth & profile endpoints
 │   ├── groups.go        # Group endpoints
 │   ├── expenses.go      # Expense endpoints
@@ -60,8 +61,16 @@ GopherDebt/
 │   ├── wish_lookup.go   # Product link lookup for wishes (SSRF-safe fetch, OpenAI fallback)
 │   ├── ai_guard.go      # AI guardrails (daily limits, usage log, cache)
 │   ├── wish_lists.go    # GoWish shared group endpoints
+│   ├── gocrumbs.go      # GoCrumbs endpoints (profile + calculate)
 │   ├── access_control.go # Whitelist/blacklist (founder only)
 │   └── receipt.go       # AI receipt scanning (OpenAI, key server-side)
+├── gocrumbs/            # GoCrumbs engine (pure functions, no DB or HTTP)
+│   ├── gocrumbs_readme.md # 📖 Documentation
+│   ├── params.go        # Tax-year constants
+│   ├── tariff.go        # § 32a EStG income tax tariff
+│   ├── lohnsteuer.go    # Port of the BMF Programmablaufplan
+│   ├── social.go        # Social insurance, Midijob, Werkstudent
+│   └── calc.go          # Calculate(Input) → Result
 ├── middleware/          # Request processing
 │   ├── middleware_readme.md # 📖 Documentation
 │   ├── auth.go          # JWT authentication
@@ -110,6 +119,7 @@ groupHandler := handlers.NewGroupHandler(database)
 stashHandler := handlers.NewStashHandler(database)
 wishHandler := handlers.NewWishHandler(database)
 wishListHandler := handlers.NewWishListHandler(database)
+goCrumbsHandler := handlers.NewGoCrumbsHandler(database)
 receiptHandler := handlers.NewReceiptHandler()
 // ... each handler gets the database connection
 ```
@@ -227,6 +237,24 @@ Starts listening for HTTP requests.
 │ cost (nullable)  │   wish_items.list_id NULL = personal wish (owned by user_id);
 │ created_at       │   set = shared wish (user_id = who added it)
 └──────────────────┘
+
+┌───────────────────┐   ┌───────────────────┐
+│ gocrumbs_profiles │   │ gocrumbs_expenses │
+├───────────────────┤   ├───────────────────┤
+│ user_id (PK, FK)  │   │ id (PK)           │
+│ work_type         │   │ user_id (FK)      │
+│ gross_amount      │   │ kind              │
+│ gross_period      │   │ name              │
+│ side_gross        │   │ amount            │
+│ steuerklasse      │   │ category          │
+│ church_tax        │   │ position          │
+│ bundesland        │   └───────────────────┘
+│ children          │   kind = subscription | custom
+│ under_23          │
+│ zusatzbeitrag     │   Inputs only: net pay and
+│ rent, savings     │   "left" are always recalculated
+│ updated_at        │
+└───────────────────┘
 ```
 
 ---
