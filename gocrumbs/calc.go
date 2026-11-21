@@ -171,6 +171,9 @@ func (p *Params) payslip(gross int64, stkl int, zkfTenths int, freibJahr int64, 
 		return job{minijob: gross > 0}
 	}
 	b, reduced, capped := p.contribBases(gross, capRV, capKV, allowMidijob)
+	if ctx.werkstudent && !reduced {
+		capped = b.rv < gross // only pension insurance is paid, so only its ceiling counts
+	}
 	out := job{
 		c:       p.employeeContribs(b, ctx.werkstudent, ctx.kvzHundredths, ctx.pvRate),
 		midijob: reduced,
@@ -313,7 +316,7 @@ func notes(in Input, p *Params, main, side job, mainGross, sideGross int64, pvz 
 	add(main.capped || side.capped, NoteBBGCapped)
 	add(sideGross > p.minijobMax, NoteSideSecondJob)
 	add(in.WorkType == WorkWerkstudent && mainGross > p.minijobMax, NoteWerkstudentRVOnly)
-	add(pvz && mainGross > p.minijobMax, NoteChildlessSurcharge)
+	add(pvz && mainGross > p.minijobMax && in.WorkType == WorkFTE, NoteChildlessSurcharge)
 	add(in.SteuerKlasse == 2 && in.Children == 0, NoteClass2NoChildren)
 	add(in.SteuerKlasse >= 3 && in.SteuerKlasse <= 5, NoteClassPartner)
 	add(in.Children > 0 && (in.SteuerKlasse == 1 || in.SteuerKlasse == 4), NoteChildAllowanceShare)
