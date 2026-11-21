@@ -73,6 +73,7 @@ func main() {
 	stashHandler := handlers.NewStashHandler(database)
 	wishHandler := handlers.NewWishHandler(database)
 	wishListHandler := handlers.NewWishListHandler(database)
+	goCrumbsHandler := handlers.NewGoCrumbsHandler(database)
 
 	// Setup router
 	r := gin.Default()
@@ -241,6 +242,11 @@ func main() {
 		api.POST("/wish-lists/:id/items", wishListHandler.CreateItem)
 		api.PUT("/wish-lists/:id/items/:itemId", wishListHandler.UpdateItem)
 		api.DELETE("/wish-lists/:id/items/:itemId", wishListHandler.DeleteItem)
+
+		// GoCrumbs routes (monthly budget calculator, German tax; the engine lives in package gocrumbs)
+		api.GET("/gocrumbs", goCrumbsHandler.GetGoCrumbs)
+		api.PUT("/gocrumbs", goCrumbsHandler.SaveGoCrumbs)
+		api.POST("/gocrumbs/calculate", goCrumbsHandler.CalculateGoCrumbs)
 
 		// Access control routes (whitelist/blacklist)
 		api.GET("/whitelist", accessControlHandler.GetWhitelist)

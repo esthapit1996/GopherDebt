@@ -27,6 +27,7 @@ This folder contains all database operations for GopherDebt. Each file handles C
 | `stash.go` | GopherStash personal expense tracking |
 | `wish.go` | GoWish personal wishlist |
 | `wish_lists.go` | GoWish shared wish groups |
+| `gocrumbs.go` | GoCrumbs budget profile and expense lines |
 | `access_control.go` | Email whitelist/blacklist management |
 | `retry.go` | Generic retry with backoff for transient DB errors |
 | `migrations.go` | Database schema creation and updates |
@@ -188,6 +189,8 @@ For each expense_payment:
 | `wish_lists` | GoWish shared wish groups |
 | `wish_list_members` | Members of each shared wish group |
 | `ai_usage` | AI calls per user, day and kind (`receipt`, `wish`), for the daily limits; rows older than 30 days are deleted at boot |
+| `gocrumbs_profiles` | One GoCrumbs budget profile per user (inputs only: work type, gross, tax class, church tax, Bundesland, children, Zusatzbeitrag, rent, savings). CHECK constraints mirror the API's ranges |
+| `gocrumbs_expenses` | A profile's named monthly expense lines (`kind` = `subscription` or `custom`, with `position`) |
 | `email_whitelist` | Approved registration emails |
 | `email_blacklist` | Blocked registration emails |
 
@@ -278,6 +281,19 @@ All personal functions only touch wishes with `list_id IS NULL`.
 | `CreateWishListItem` | `db *sql.DB, listID, userID int, name, why, link string, cost *float64` | `*models.WishItem, error` | Adds a wish to a group |
 | `UpdateWishListItem` | `db *sql.DB, listID, itemID int, name, why, link string, cost *float64` | `*models.WishItem, error` | Edits a wish in a group |
 | `DeleteWishListItem` | `db *sql.DB, listID, itemID int` | `error` | Deletes a wish from a group |
+
+---
+
+## 🔧 gocrumbs.go
+
+### Functions
+
+| Function | Parameters | Returns | Description |
+|----------|------------|---------|-------------|
+| `GetGoCrumbsProfile` | `db *sql.DB, userID int` | `*models.GoCrumbsProfile, error` | The user's saved profile with its expense lines (empty lists, never nil); `ErrNotFound` before the first save |
+| `SaveGoCrumbsProfile` | `db *sql.DB, userID int, req *models.GoCrumbsRequest` | `*models.GoCrumbsProfile, error` | Creates or replaces the profile and its expense lines in one transaction and returns the saved profile |
+
+`SaveGoCrumbsProfile` upserts the profile row first, which holds the row lock until commit, so two parallel saves by one user run one after the other and can't duplicate expense lines. `MaxGoCrumbsLines` (50) caps subscriptions plus custom lines; the handler enforces it.
 
 ---
 

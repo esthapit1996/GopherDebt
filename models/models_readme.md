@@ -235,6 +235,35 @@ Used for editing a shared wish group. Same options as a debt group.
 |-------|------|------------|-------------|
 | `UserID` | `int` | `required,gt=0` | User to add to the group |
 
+### GoCrumbsExpenseLine
+
+One named monthly expense (a subscription or a custom line).
+
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `Name` | `string` | `required,max=60` | Trimmed, must not be blank (checked in the handler) |
+| `Amount` | `float64` | `gte=0,max=1000000` | EUR per month |
+| `Category` | `string` | `max=30` | Optional tag |
+
+### GoCrumbsRequest
+
+A GoCrumbs budget profile, used to save it and to calculate. Inputs only, never results.
+
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `WorkType` | `string` | `required,oneof=fte werkstudent` | Full-time employee or Werkstudent |
+| `GrossAmount` | `float64` | `gte=0,max=10000000` | Gross income per `GrossPeriod` |
+| `GrossPeriod` | `string` | `required,oneof=month year` | Whether `GrossAmount` is monthly or yearly |
+| `SideGross` | `float64` | `gte=0,max=100000` | Gross side income per month (employees only; rejected for a Werkstudent) |
+| `SteuerKlasse` | `int` | `required,min=1,max=6` | Tax class |
+| `ChurchTax` | `bool` | | Pays church tax |
+| `Bundesland` | `string` | `required,oneof=` the 16 codes | Sets the church tax rate (8% BW/BY, else 9%) and the Sachsen care-insurance rule |
+| `Children` | `int` | `min=0,max=20` | Affects care insurance and the child allowance |
+| `Under23` | `bool` | | Childless and under 23: no care-insurance surcharge |
+| `Zusatzbeitrag` | `float64` | `gte=0,max=10` | Health insurer's additional rate in % (full rate; the employee pays half) |
+| `Rent`, `Savings` | `float64` | `gte=0,max=1000000` | EUR per month |
+| `Subscriptions`, `CustomExpenses` | `[]GoCrumbsExpenseLine` | `max=50,dive` | Expense lines (50 in total, checked in the handler) |
+
 ---
 
 ## 📤 Response Models
@@ -317,6 +346,14 @@ Public view of a user in a shared wish group (no email).
 | `Members` | `[]WishMember` | `members` | Members, in join order |
 | `ItemCount` | `int` | `item_count` | Number of wishes |
 | `TotalCost` | `float64` | `total_cost` | Sum of priced wishes |
+
+### GoCrumbsProfile
+
+A saved profile: the fields of `GoCrumbsRequest` (same JSON names) plus:
+
+| Field | Type | JSON Tag | Description |
+|-------|------|----------|-------------|
+| `UpdatedAt` | `time.Time` | `updated_at` | When it was last saved |
 
 ---
 

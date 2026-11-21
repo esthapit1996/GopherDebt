@@ -245,6 +245,35 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY`,
 		// Only today's counts matter; keep a month for looking back
 		`DELETE FROM ai_usage WHERE day < CURRENT_DATE - 30`,
+		// GoCrumbs: one budget profile per user (inputs only, results are always recalculated)
+		`CREATE TABLE IF NOT EXISTS gocrumbs_profiles (
+			user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+			work_type VARCHAR(12) NOT NULL DEFAULT 'fte' CHECK (work_type IN ('fte', 'werkstudent')),
+			gross_amount DECIMAL(12, 2) NOT NULL DEFAULT 0 CHECK (gross_amount >= 0),
+			gross_period VARCHAR(5) NOT NULL DEFAULT 'month' CHECK (gross_period IN ('month', 'year')),
+			side_gross DECIMAL(10, 2) NOT NULL DEFAULT 0 CHECK (side_gross >= 0),
+			steuerklasse SMALLINT NOT NULL DEFAULT 1 CHECK (steuerklasse BETWEEN 1 AND 6),
+			church_tax BOOLEAN NOT NULL DEFAULT FALSE,
+			bundesland CHAR(2) NOT NULL DEFAULT 'NW' CHECK (bundesland IN ('BW', 'BY', 'BE', 'BB', 'HB', 'HH', 'HE', 'MV', 'NI', 'NW', 'RP', 'SL', 'SN', 'ST', 'SH', 'TH')),
+			children SMALLINT NOT NULL DEFAULT 0 CHECK (children BETWEEN 0 AND 20),
+			under_23 BOOLEAN NOT NULL DEFAULT FALSE,
+			zusatzbeitrag DECIMAL(4, 2) NOT NULL DEFAULT 2.90 CHECK (zusatzbeitrag BETWEEN 0 AND 10),
+			rent DECIMAL(10, 2) NOT NULL DEFAULT 0 CHECK (rent >= 0),
+			savings DECIMAL(10, 2) NOT NULL DEFAULT 0 CHECK (savings >= 0),
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`ALTER TABLE gocrumbs_profiles ENABLE ROW LEVEL SECURITY`,
+		`CREATE TABLE IF NOT EXISTS gocrumbs_expenses (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			kind VARCHAR(12) NOT NULL CHECK (kind IN ('subscription', 'custom')),
+			name VARCHAR(60) NOT NULL,
+			amount DECIMAL(10, 2) NOT NULL CHECK (amount >= 0),
+			category VARCHAR(30) NOT NULL DEFAULT '',
+			position INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_gocrumbs_expenses_user_id ON gocrumbs_expenses(user_id)`,
+		`ALTER TABLE gocrumbs_expenses ENABLE ROW LEVEL SECURITY`,
 	}
 
 	for i, migration := range migrations {

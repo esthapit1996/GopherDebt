@@ -9,6 +9,7 @@ A full-featured expense sharing and personal finance backend built with Go, Gin,
 - **Expense Payments** — Partial repayments toward specific expenses
 - **GopherStash** — Personal expense tracker with categories and spending summaries
 - **GoWish** — Wishlist of things to buy (name, why, link, cost), personal or in shared wish groups (separate from debt groups)
+- **GoCrumbs** — Monthly "what's left" calculator: German gross-to-net (Lohnsteuer, Soli, church tax, social insurance; employees and Werkstudenten) minus rent, savings and subscriptions. One saved profile per user, no AI
 - **Receipt Scanning** — AI-powered receipt parsing via OpenAI (default model `gpt-6-luna`)
 - **Currency Conversion** — Live exchange rates and historical trend data
 - **Suggestion Box** — Feature suggestions with voting, comments, and status tracking
@@ -188,6 +189,16 @@ Separate from debt groups. Each member has their own section of wishes in the gr
 | PUT | `/api/wish-lists/:id/items/:itemId` | Edit a wish |
 | DELETE | `/api/wish-lists/:id/items/:itemId` | Delete a wish |
 
+### GoCrumbs — Monthly Budget Calculator (Protected)
+
+One saved profile per user. The profile stores inputs only; net pay and "left" are recalculated on every request, using the latest supported tax year (shown as `tax_year` in the result).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/gocrumbs` | Get my saved profile (`data` is absent until the first save) |
+| PUT | `/api/gocrumbs` | Create or replace my profile (must be calculable) and return it |
+| POST | `/api/gocrumbs/calculate` | Calculate net pay and what's left for the given inputs, without saving |
+
 ### Access Control (Protected, Founder Only)
 
 | Method | Endpoint | Description |
@@ -308,6 +319,29 @@ Authorization: Bearer <token>
 ```
 Only `name` is required (max 64 chars). `why` (max 128 chars), `link` and `cost` are optional; `link` must be an `http(s)://` URL and `cost` must be > 0 when set.
 
+### Save GoCrumbs Budget
+```json
+PUT /api/gocrumbs
+Authorization: Bearer <token>
+{
+  "work_type": "fte",
+  "gross_amount": 4000,
+  "gross_period": "month",
+  "side_gross": 0,
+  "steuerklasse": 1,
+  "church_tax": false,
+  "bundesland": "NW",
+  "children": 0,
+  "under_23": false,
+  "zusatzbeitrag": 2.9,
+  "rent": 900,
+  "savings": 300,
+  "subscriptions": [{ "name": "Netflix", "amount": 12.99, "category": "media" }],
+  "custom_expenses": [{ "name": "Phone", "amount": 20 }]
+}
+```
+`work_type` is `fte` or `werkstudent` (a Werkstudent can't have `side_gross`). `gross_period` is `month` or `year`; every other amount is EUR per month. `bundesland` is the two-letter code, `zusatzbeitrag` the health insurer's rate in % (0-10). At most 50 expense lines in total, names up to 60 characters. `POST /api/gocrumbs/calculate` takes the same body and returns the breakdown: `gross`, `rv`, `av`, `kv`, `pv`, `lohnsteuer`, `soli`, `kirchensteuer`, `net`, `expenses`, `left`, the rates and `notes`.
+
 ### Scan Receipt
 ```
 POST /api/receipt/scan
@@ -337,6 +371,7 @@ Max 14 MB (413 if larger), to keep server memory bounded. JPEG, PNG, WEBP or GIF
 │   ├── stash.go           # GopherStash personal expenses
 │   ├── wish.go            # GoWish personal wishlist
 │   ├── wish_lists.go      # GoWish shared wish groups
+│   ├── gocrumbs.go        # GoCrumbs budget profile + expense lines
 │   ├── access_control.go  # Email whitelist/blacklist
 │   └── retry.go           # Generic retry with backoff for transient DB errors
 ├── handlers/
@@ -353,13 +388,22 @@ Max 14 MB (413 if larger), to keep server memory bounded. JPEG, PNG, WEBP or GIF
 │   ├── wish_lookup.go     # Product link → name/price (shop data first, OpenAI fallback, SSRF-safe)
 │   ├── ai_guard.go        # AI guardrails: daily per-user limits, token usage log, lookup cache
 │   ├── wish_lists.go      # GoWish shared group endpoints
+│   ├── gocrumbs.go        # GoCrumbs endpoints (profile + calculate)
 │   ├── access_control.go  # Whitelist/blacklist (founder only)
 │   ├── receipt.go         # AI receipt scanning via OpenAI
 │   ├── handlers_test.go   # Handler tests
 │   ├── stash_test.go      # GopherStash tests
 │   ├── wish_test.go       # GoWish tests
 │   ├── wish_lists_test.go # GoWish shared group tests
+│   ├── gocrumbs_test.go   # GoCrumbs validation + calculate endpoint tests
 │   └── receipt_test.go    # Receipt scan limits + OpenAI request/errors (fake server)
+├── gocrumbs/              # GoCrumbs engine: German gross-to-net, pure functions (see gocrumbs/gocrumbs_readme.md)
+│   ├── params.go          # Tax-year constants (2026)
+│   ├── tariff.go          # § 32a EStG income tax tariff
+│   ├── lohnsteuer.go      # Port of the BMF Programmablaufplan (Lohnsteuer, Soli, Kirchensteuer base)
+│   ├── social.go          # Employee social insurance, Midijob, Werkstudent
+│   ├── calc.go            # Calculate(Input) → Result
+│   └── testdata/          # The BMF's official check tables, used as test reference
 ├── middleware/
 │   ├── auth.go            # JWT authentication
 │   ├── active_user.go     # Rejects deleted/blacklisted accounts, outdated tokens
@@ -375,7 +419,7 @@ Max 14 MB (413 if larger), to keep server memory bounded. JPEG, PNG, WEBP or GIF
 go test ./...
 ```
 
-51 tests covering authentication, group operations, expense validation, GopherStash and GoWish (personal + shared) validation, and middleware.
+Over 100 tests covering authentication, group operations, expense validation, GopherStash, GoWish (personal + shared) and GoCrumbs validation, the GoCrumbs tax engine (checked against the BMF's official reference tables) and middleware.
 
 ## Deployment
 
