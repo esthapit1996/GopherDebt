@@ -171,7 +171,7 @@ func (p *Params) payslip(gross int64, stkl int, zkfTenths int, freibJahr int64, 
 		return job{minijob: gross > 0}
 	}
 	b, reduced, capped := p.contribBases(gross, capRV, capKV, allowMidijob)
-	if ctx.werkstudent {
+	if ctx.werkstudent && !reduced {
 		capped = b.rv < gross // only pension insurance is paid, so only its ceiling counts
 	}
 	out := job{

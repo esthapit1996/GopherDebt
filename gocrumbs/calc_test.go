@@ -321,6 +321,13 @@ func TestCalculateWerkstudentNotes(t *testing.T) {
 		t.Errorf("werkstudent notes %v lack %s", got.Notes, NoteWerkstudentRVOnly)
 	}
 
+	// In the Midijob range the base is reduced, which is not a ceiling
+	in.GrossMain = 1000
+	got, _ = Calculate(in)
+	if slices.Contains(got.Notes, NoteBBGCapped) {
+		t.Errorf("werkstudent at 1,000: notes %v must not contain %s", got.Notes, NoteBBGCapped)
+	}
+
 	// Above the RV ceiling the pension contribution really is capped
 	in.GrossMain = 9000
 	got, _ = Calculate(in)
