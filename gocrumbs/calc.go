@@ -176,7 +176,7 @@ type jobCtx struct {
 	church        bool
 	churchPct     int64
 	kvzHundredths int64
-	pvRate        int64
+	pv            pvRates
 	pva           int
 	pvs, pvz      bool
 }
@@ -192,7 +192,7 @@ func (p *Params) payslip(gross int64, stkl int, zkfTenths int, freibJahr int64, 
 		capped = b.rv < gross // only pension insurance is paid, so only its ceiling counts
 	}
 	out := job{
-		c:       p.employeeContribs(b, ctx.werkstudent, ctx.kvzHundredths, ctx.pvRate),
+		c:       p.employeeContribs(b, ctx.werkstudent, ctx.kvzHundredths, ctx.pv),
 		midijob: reduced,
 		capped:  capped,
 	}
@@ -243,7 +243,7 @@ func Calculate(in Input) (Result, error) {
 		pvs:           in.Bundesland == "SN",
 		pvz:           pvz,
 	}
-	ctx.pvRate = p.pvsatzan(ctx.pvs, ctx.pvz, ctx.pva)
+	ctx.pv = p.pvRatesFor(ctx.pvs, ctx.pvz, ctx.pva)
 
 	// Kinderfreibetrag (affects Soli and Kirchensteuer base only). Classes I and IV
 	// share the allowance with the other parent, II and III get it in full.

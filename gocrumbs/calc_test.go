@@ -106,8 +106,9 @@ func TestCalculateScenarios(t *testing.T) {
 
 	t.Run("Midijob for FTE: reduced base for all four branches", func(t *testing.T) {
 		got, _ := Calculate(base(1000))
-		// Employee base 20/13.97 * (1000 - 603) = 568.36: RV 52.86, AV 7.39, KV 49.73, PV 13.64.
-		if !near(got.RV, 52.86) || !near(got.AV, 7.39) || !near(got.KV, 49.73) || !near(got.PV, 13.64) {
+		// Employee base 20/13.97 * (1000 - 603) = 568.36: RV 52.86, AV 7.39, KV 49.73.
+		// PV 568.36 * 1.8% + childless surcharge on the Gesamtbeitrag base 854.06 * 0.6% = 15.35.
+		if !near(got.RV, 52.86) || !near(got.AV, 7.39) || !near(got.KV, 49.73) || !near(got.PV, 15.35) {
 			t.Errorf("midijob contribs = %v %v %v %v", got.RV, got.AV, got.KV, got.PV)
 		}
 		if !slices.Contains(got.Notes, NoteMidijobReduced) {
@@ -447,4 +448,36 @@ func TestCalculateMatchesWerkstudentPayslips(t *testing.T) {
 	// 19,584 - 1,266 - 1,821 = 16,496 -> tariff 738/yr -> 61.50/month.
 	got, _ = Calculate(werk(1632))
 	check(t, "may", got, want{rv: 137.00, lst: 61.50, net: 1433.50})
+}
+
+// In the Midijob range the PV childless surcharge and the child discount are calculated on the
+// Gesamtbeitrag base (§ 20 Abs. 2a Satz 1 SGB IV), the regular share on the employee's base
+// (Satz 6). Expected values from exact fractions: S6(1000) = 568.36, S1(1000) = 854.06,
+// S6(1500) = 1,284.18, S1(1500) = 1,427.03, S6(650) = 67.29, S1(650) = 452.98.
+func TestCalculateMidijobPV(t *testing.T) {
+	cases := []struct {
+		name     string
+		gross    float64
+		children int
+		land     string
+		want     float64
+	}{
+		{"childless", 1000, 0, "NW", 15.35},                            // 568.36*1.8% + 854.06*0.6%
+		{"childless higher in the range", 1500, 0, "NW", 31.68},        // 1284.18*1.8% + 1427.03*0.6%
+		{"childless in Sachsen", 1000, 0, "SN", 18.20},                 // 568.36*2.3% + 854.06*0.6%
+		{"3 children", 1000, 3, "NW", 5.96},                            // 568.36*1.8% - 854.06*0.5%
+		{"5 children just above 603: never negative", 650, 5, "NW", 0}, // 67.29*1.8% - 452.98*1.0% < 0
+	}
+	for _, c := range cases {
+		in := base(c.gross)
+		in.Children = c.children
+		in.Bundesland = c.land
+		got, err := Calculate(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !near(got.PV, c.want) {
+			t.Errorf("%s: PV = %v, want %v", c.name, got.PV, c.want)
+		}
+	}
 }

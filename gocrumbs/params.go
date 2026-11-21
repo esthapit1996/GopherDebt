@@ -29,6 +29,7 @@ type Params struct {
 	// Minijob / Midijob (Uebergangsbereich).
 	minijobMax int64 // cents per month
 	midijobMax int64 // cents per month
+	midijobF   int64 // Faktor F in 1e-4 (§ 20 Abs. 2a Satz 1 SGB IV)
 
 	// Income tax, § 32a EStG tariff (zvE in whole euros).
 	grundfreibetrag int64
@@ -72,6 +73,8 @@ var params2026 = Params{
 
 	minijobMax: 60_300,  // 603.00 EUR
 	midijobMax: 200_000, // 2,000.00 EUR
+	// F = 0.28 / 42.3% total rate = 0.6619; confirmed by a 2026 payslip: 1,360.00 gives RV-Brutto 1,266.60.
+	midijobF: 6_619,
 
 	grundfreibetrag: 12_348,
 	zone2End:        17_799,
