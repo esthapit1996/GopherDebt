@@ -30,6 +30,42 @@ func TestMidijobBase2025Payslip(t *testing.T) {
 	}
 }
 
+// Gesamtbeitrag base: BE = F*G + ((OG - F*G)/(OG - G)) * (AE - G) with G = 603, OG = 2,000,
+// F = 0.6619, evaluated with exact fractions and rounded half up.
+func TestMidijobTotalBase(t *testing.T) {
+	p, _ := ForYear(2026)
+	cases := []struct{ ae, want int64 }{
+		{60301, 39914},   // just above the Minijob limit: ~ F*G = 399.13
+		{100000, 85406},  // 1,000.00
+		{136000, 126660}, // 1,360.00: "RV-Brutto 1.266,60" on a June 2026 payslip
+		{150000, 142703}, // 1,500.00
+		{200000, 200000}, // continuous: BE = OG at the upper limit
+	}
+	for _, c := range cases {
+		if got := p.midijobTotalBase(c.ae); got != c.want {
+			t.Errorf("midijobTotalBase(%d) = %d, want %d", c.ae, got, c.want)
+		}
+	}
+}
+
+// The split PV rates must add up to the PAP rate used for the Vorsorgepauschale
+func TestPvRatesMatchPAP(t *testing.T) {
+	p, _ := ForYear(2026)
+	for _, pvs := range []bool{false, true} {
+		for _, pvz := range []bool{false, true} {
+			for pva := 0; pva <= 4; pva++ {
+				if pvz && pva > 0 {
+					continue
+				}
+				r := p.pvRatesFor(pvs, pvz, pva)
+				if got, want := r.main+r.adj, p.pvsatzan(pvs, pvz, pva); got != want {
+					t.Errorf("pvs=%v pvz=%v pva=%d: main+adj = %d, want %d", pvs, pvz, pva, got, want)
+				}
+			}
+		}
+	}
+}
+
 func TestMidijobBaseNeverExceedsGross(t *testing.T) {
 	p, _ := ForYear(2026)
 	for ae := p.minijobMax + 1; ae <= p.midijobMax; ae += 37 {
@@ -117,13 +153,13 @@ func TestContribBasesCeilings(t *testing.T) {
 
 func TestEmployeeContribsWerkstudentPaysOnlyRV(t *testing.T) {
 	p, _ := ForYear(2026)
-	b := bases{rv: 200_000, kv: 200_000}
-	full := p.employeeContribs(b, false, 290, 24_000)
+	b := bases{rv: 200_000, kv: 200_000, pvAdj: 200_000}
+	full := p.employeeContribs(b, false, 290, pvRates{main: 18_000, adj: 6_000})
 	// 2,000.00: RV 9.3% = 186.00, AV 1.3% = 26.00, KV 8.75% = 175.00, PV 2.4% = 48.00
 	if full != (contribs{rv: 18_600, av: 2_600, kv: 17_500, pv: 4_800}) {
 		t.Errorf("full contribs = %+v", full)
 	}
-	werk := p.employeeContribs(b, true, 290, 24_000)
+	werk := p.employeeContribs(b, true, 290, pvRates{main: 18_000, adj: 6_000})
 	if werk != (contribs{rv: 18_600}) {
 		t.Errorf("werkstudent contribs = %+v, want RV only", werk)
 	}

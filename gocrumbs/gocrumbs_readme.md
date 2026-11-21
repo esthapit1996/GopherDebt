@@ -36,7 +36,7 @@ res, err := gocrumbs.Calculate(gocrumbs.Input{
 | Situation | Rule |
 |-----------|------|
 | Gross up to €603/month | Minijob: net = gross, no deductions |
-| €603.01 to €2,000 | Midijob: employee shares on the reduced base `OG/(OG - G) * (AE - G)` (G = 603, OG = 2,000) |
+| €603.01 to €2,000 | Midijob: employee shares on the reduced base `OG/(OG - G) * (AE - G)` (G = 603, OG = 2,000). The PV childless surcharge and child discount use the Gesamtbeitrag base `F*G + ((OG - F*G)/(OG - G)) * (AE - G)` with F = 0.6619 (DRV; F confirmed by a payslip) |
 | Above the ceilings | RV/AV capped at €8,450/month, KV/PV at €5,812.50/month |
 | Werkstudent | Only Rentenversicherung (reduced in the Uebergangsbereich); Lohnsteuer as normal |
 | Side income (FTE only) | Up to €603: net = gross. Above: second job in Steuerklasse VI, social insurance on the headroom left under the ceilings |
@@ -69,6 +69,7 @@ Taken directly from the PAP 2026 (final, 12.11.2025): social-insurance ceilings 
 - The extra Entlastungsbetrag for a 2nd child and beyond in Steuerklasse II (+240 EUR/child) is entered by the Finanzamt as an ELStAM Freibetrag, not part of the PAP.
 - KV is paid at 7.3% + Zusatzbeitrag / 2. The PAP's 7% (no Krankengeld part) is only used inside the Vorsorgepauschale, not for the contribution.
 - For a Werkstudent the Vorsorgepauschale only has the pension part (no AV, KV or PV part): a Werkstudent bears no KV/PV contributions through the employer. This is inferred from two 2026 payslips, which it reproduces to the cent; the PAP itself doesn't say so.
+- In the Midijob range the PV child discount is taken on the Gesamtbeitrag base (DRV: "wie beim Beitragszuschlag"). Just above €603 with several children it can exceed the regular PV share; the PV line then stays at 0 instead of going negative.
 - Kirchensteuer is the Bemessungsgrundlage x rate, rounded half up. Contribution lines are rounded half up. Expect ±1 cent versus a payslip.
 - Classes I and IV share the Kinderfreibetrag with the other parent (4,878 per child); II and III get 9,756.
 - All children are treated as under 25 for the PV Abschlag.
