@@ -68,7 +68,7 @@ func GetAllUsers(d *sql.DB) ([]models.User, error) {
 		}
 		defer rows.Close()
 
-		var users []models.User
+		users := []models.User{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var user models.User
 			if err := rows.Scan(&user.ID, &user.Email, &user.Name, &user.Avatar, &user.ThemePreference, &user.Language, &user.CreatedAt, &user.UpdatedAt); err != nil {

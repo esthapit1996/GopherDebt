@@ -79,7 +79,7 @@ func GetUserGroups(d *sql.DB, userID int) ([]models.Group, error) {
 		}
 		defer rows.Close()
 
-		var groups []models.Group
+		groups := []models.Group{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var group models.Group
 			var description sql.NullString
@@ -149,7 +149,7 @@ func GetGroupMembers(d *sql.DB, groupID int) ([]models.User, error) {
 		}
 		defer rows.Close()
 
-		var members []models.User
+		members := []models.User{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var user models.User
 			if err := rows.Scan(&user.ID, &user.Email, &user.Name, &user.Avatar, &user.CreatedAt, &user.UpdatedAt); err != nil {

@@ -52,7 +52,7 @@ func GetGroupActivities(d *sql.DB, groupID int, limit int) ([]models.Activity, e
 		}
 		defer rows.Close()
 
-		var activities []models.Activity
+		activities := []models.Activity{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var activity models.Activity
 			var user models.User

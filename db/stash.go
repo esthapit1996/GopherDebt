@@ -36,7 +36,7 @@ func GetStashExpenses(d *sql.DB, userID int) ([]models.StashExpense, error) {
 		}
 		defer rows.Close()
 
-		var expenses []models.StashExpense
+		expenses := []models.StashExpense{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var e models.StashExpense
 			if err := rows.Scan(&e.ID, &e.UserID, &e.Amount, &e.Description, &e.Category, &e.CreatedAt); err != nil {

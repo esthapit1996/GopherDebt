@@ -30,7 +30,7 @@ func GetGroupSettlements(d *sql.DB, groupID int) ([]models.Settlement, error) {
 		}
 		defer rows.Close()
 
-		var settlements []models.Settlement
+		settlements := []models.Settlement{} // never nil: an empty list is [] in the API, not null
 		for rows.Next() {
 			var settlement models.Settlement
 			if err := rows.Scan(&settlement.ID, &settlement.GroupID, &settlement.PaidBy, &settlement.PaidTo, &settlement.Amount, &settlement.CreatedAt); err != nil {
@@ -157,7 +157,7 @@ func CalculateGroupBalances(d *sql.DB, groupID int) ([]models.Balance, error) {
 			}
 		}
 
-		var balances []models.Balance
+		balances := []models.Balance{} // never nil: an empty list is [] in the API, not null
 		for len(creditors) > 0 && len(debtors) > 0 {
 			creditor := &creditors[0]
 			debtor := &debtors[0]
@@ -346,7 +346,7 @@ func GetDebtOverview(d *sql.DB, userID int) ([]DebtOverviewItem, error) {
 		}()
 
 		// Convert to DebtOverviewItem slice, only include non-zero balances
-		var result []DebtOverviewItem
+		result := []DebtOverviewItem{} // never nil: an empty list is [] in the API, not null
 		for uid, balance := range userBalances {
 			if balance > 0.01 || balance < -0.01 {
 				if userMap[uid] == nil {
@@ -383,7 +383,7 @@ type DebtDetailItem struct {
 // GetDebtDetails returns a detailed breakdown of debts between the current user and another user
 func GetDebtDetails(d *sql.DB, userID, otherUserID int) ([]DebtDetailItem, error) {
 	return retry("GetDebtDetails", func() ([]DebtDetailItem, error) {
-		var items []DebtDetailItem
+		items := []DebtDetailItem{} // never nil: an empty list is [] in the API, not null
 
 		// Get all groups the user is a member of
 		groups, err := GetUserGroups(d, userID)
@@ -523,7 +523,7 @@ type PaymentHistoryItem struct {
 // GetPaymentHistory returns the user's settlements and expense payments made after their last clear
 func GetPaymentHistory(d *sql.DB, userID int) ([]PaymentHistoryItem, error) {
 	return retry("GetPaymentHistory", func() ([]PaymentHistoryItem, error) {
-		var history []PaymentHistoryItem
+		history := []PaymentHistoryItem{} // never nil: an empty list is [] in the API, not null
 
 		// Get settlements where user is payer or receiver
 		rows, err := d.Query(

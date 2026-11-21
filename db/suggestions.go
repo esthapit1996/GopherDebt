@@ -68,7 +68,7 @@ func GetAllSuggestions(db *sql.DB, currentUserID int) ([]Suggestion, error) {
 	}
 	defer rows.Close()
 
-	var suggestions []Suggestion
+	suggestions := []Suggestion{} // never nil: an empty list is [] in the API, not null
 	for rows.Next() {
 		var s Suggestion
 		if err := rows.Scan(&s.ID, &s.UserID, &s.UserName, &s.UserEmail, &s.Content, &s.Type, &s.Status, &s.CreatedAt, &s.Likes, &s.Dislikes, &s.UserVote, &s.CommentCount); err != nil {
@@ -165,7 +165,7 @@ func GetSuggestionVotes(db *sql.DB, suggestionID int) ([]Vote, error) {
 	}
 	defer rows.Close()
 
-	var votes []Vote
+	votes := []Vote{} // never nil: an empty list is [] in the API, not null
 	for rows.Next() {
 		var v Vote
 		if err := rows.Scan(&v.ID, &v.SuggestionID, &v.UserID, &v.UserName, &v.UserEmail, &v.VoteType, &v.CreatedAt); err != nil {
@@ -206,7 +206,7 @@ func GetSuggestionComments(db *sql.DB, suggestionID int) ([]Comment, error) {
 	}
 	defer rows.Close()
 
-	var comments []Comment
+	comments := []Comment{} // never nil: an empty list is [] in the API, not null
 	for rows.Next() {
 		var c Comment
 		if err := rows.Scan(&c.ID, &c.SuggestionID, &c.UserID, &c.UserName, &c.Content, &c.CreatedAt); err != nil {
