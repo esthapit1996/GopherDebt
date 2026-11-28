@@ -290,6 +290,61 @@ func RunMigrations(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_gocrumbs_extra_pay_user_id ON gocrumbs_extra_pay(user_id)`,
 		`ALTER TABLE gocrumbs_extra_pay ENABLE ROW LEVEL SECURITY`,
+		// GoCrumbs pages: named budgets (e.g. one per month), up to MaxGoCrumbsPages per user and work
+		// type. A page's work type is fixed. Additive only: the single-profile tables above stay
+		// untouched, and their data is copied over once by copyGoCrumbsProfilesToPages.
+		`CREATE TABLE IF NOT EXISTS gocrumbs_pages (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name VARCHAR(40) NOT NULL CHECK (btrim(name) <> ''),
+			work_type VARCHAR(12) NOT NULL CHECK (work_type IN ('fte', 'werkstudent')),
+			gross_amount DECIMAL(12, 2) NOT NULL DEFAULT 0 CHECK (gross_amount >= 0),
+			gross_period VARCHAR(5) NOT NULL DEFAULT 'month' CHECK (gross_period IN ('month', 'year')),
+			side_gross DECIMAL(10, 2) NOT NULL DEFAULT 0 CHECK (side_gross >= 0),
+			steuerklasse SMALLINT NOT NULL DEFAULT 1 CHECK (steuerklasse BETWEEN 1 AND 6),
+			church_tax BOOLEAN NOT NULL DEFAULT FALSE,
+			bundesland CHAR(2) NOT NULL DEFAULT 'NW' CHECK (bundesland IN ('BW', 'BY', 'BE', 'BB', 'HB', 'HH', 'HE', 'MV', 'NI', 'NW', 'RP', 'SL', 'SN', 'ST', 'SH', 'TH')),
+			children SMALLINT NOT NULL DEFAULT 0 CHECK (children BETWEEN 0 AND 20),
+			under_23 BOOLEAN NOT NULL DEFAULT FALSE,
+			zusatzbeitrag DECIMAL(4, 2) NOT NULL DEFAULT 2.90 CHECK (zusatzbeitrag BETWEEN 0 AND 10),
+			rent DECIMAL(10, 2) NOT NULL DEFAULT 0 CHECK (rent >= 0),
+			savings DECIMAL(10, 2) NOT NULL DEFAULT 0 CHECK (savings >= 0),
+			ws_hourly_wage DECIMAL(8, 2) NOT NULL DEFAULT 0 CHECK (ws_hourly_wage >= 0),
+			ws_hours DECIMAL(7, 2) NOT NULL DEFAULT 0 CHECK (ws_hours >= 0),
+			ws_hours_period VARCHAR(5) NOT NULL DEFAULT 'month' CHECK (ws_hours_period IN ('week', 'month')),
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		// Page names are unique per user and work type, ignoring case
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_gocrumbs_pages_name ON gocrumbs_pages(user_id, work_type, lower(name))`,
+		`ALTER TABLE gocrumbs_pages ENABLE ROW LEVEL SECURITY`,
+		`CREATE TABLE IF NOT EXISTS gocrumbs_page_expenses (
+			id SERIAL PRIMARY KEY,
+			page_id INTEGER NOT NULL REFERENCES gocrumbs_pages(id) ON DELETE CASCADE,
+			kind VARCHAR(12) NOT NULL CHECK (kind IN ('subscription', 'custom')),
+			name VARCHAR(60) NOT NULL,
+			amount DECIMAL(10, 2) NOT NULL CHECK (amount >= 0),
+			category VARCHAR(30) NOT NULL DEFAULT '',
+			position INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_gocrumbs_page_expenses_page_id ON gocrumbs_page_expenses(page_id)`,
+		`ALTER TABLE gocrumbs_page_expenses ENABLE ROW LEVEL SECURITY`,
+		`CREATE TABLE IF NOT EXISTS gocrumbs_page_extra_pay (
+			id SERIAL PRIMARY KEY,
+			page_id INTEGER NOT NULL REFERENCES gocrumbs_pages(id) ON DELETE CASCADE,
+			name VARCHAR(60) NOT NULL,
+			amount DECIMAL(10, 2) NOT NULL CHECK (amount >= 0),
+			tax_free BOOLEAN NOT NULL DEFAULT FALSE,
+			position INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_gocrumbs_page_extra_pay_page_id ON gocrumbs_page_extra_pay(page_id)`,
+		`ALTER TABLE gocrumbs_page_extra_pay ENABLE ROW LEVEL SECURITY`,
+		// One-time data migrations that are done, so they never run twice
+		`CREATE TABLE IF NOT EXISTS migration_flags (
+			name VARCHAR(64) PRIMARY KEY,
+			done_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`ALTER TABLE migration_flags ENABLE ROW LEVEL SECURITY`,
 	}
 
 	for i, migration := range migrations {
@@ -297,6 +352,10 @@ func RunMigrations(db *sql.DB) error {
 		if err != nil {
 			return fmt.Errorf("migration %d failed: %w", i+1, err)
 		}
+	}
+
+	if err := copyGoCrumbsProfilesToPages(db); err != nil {
+		return fmt.Errorf("copy GoCrumbs profiles to pages: %w", err)
 	}
 
 	if err := lockDownPublicAPI(db); err != nil {

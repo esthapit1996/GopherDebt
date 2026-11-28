@@ -363,10 +363,41 @@ Public view of a user in a shared wish group (no email).
 
 ### GoCrumbsProfile
 
-A saved profile: the fields of `GoCrumbsRequest` (same JSON names) plus:
+A saved profile (deprecated, replaced by pages): the fields of `GoCrumbsRequest` (same JSON names) plus:
 
 | Field | Type | JSON Tag | Description |
 |-------|------|----------|-------------|
+| `UpdatedAt` | `time.Time` | `updated_at` | When it was last saved |
+
+---
+
+### GoCrumbsPageRequest
+
+Creates or saves a GoCrumbs page: the fields of `GoCrumbsRequest` (embedded, same JSON names) plus:
+
+| Field | Type | Validation | Description |
+|-------|------|------------|-------------|
+| `Name` | `string` | `required,max=40` | Chosen by the user. Trimmed, must not be blank (checked in the handler); unique per user and work type, ignoring case (checked by the database) |
+
+`WorkType` can't change after the page is created.
+
+---
+
+### GoCrumbsPage
+
+A saved page: `ID` (`id`), `Name` (`name`), the fields of `GoCrumbsRequest`, `CreatedAt` (`created_at`) and `UpdatedAt` (`updated_at`).
+
+---
+
+### GoCrumbsPageSummary
+
+One entry of `GET /api/gocrumbs/pages`, one tab in the UI.
+
+| Field | Type | JSON Tag | Description |
+|-------|------|----------|-------------|
+| `ID` | `int` | `id` | Page ID |
+| `Name` | `string` | `name` | Page name |
+| `WorkType` | `string` | `work_type` | `fte` or `werkstudent` |
 | `UpdatedAt` | `time.Time` | `updated_at` | When it was last saved |
 
 ---

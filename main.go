@@ -247,6 +247,12 @@ func main() {
 		api.GET("/gocrumbs", goCrumbsHandler.GetGoCrumbs)
 		api.PUT("/gocrumbs", goCrumbsHandler.SaveGoCrumbs)
 		api.POST("/gocrumbs/calculate", goCrumbsHandler.CalculateGoCrumbs)
+		// Named pages (budgets per month or scenario), up to 15 per work type
+		api.GET("/gocrumbs/pages", goCrumbsHandler.ListGoCrumbsPages)
+		api.POST("/gocrumbs/pages", goCrumbsHandler.CreateGoCrumbsPage)
+		api.GET("/gocrumbs/pages/:id", goCrumbsHandler.GetGoCrumbsPage)
+		api.PUT("/gocrumbs/pages/:id", goCrumbsHandler.UpdateGoCrumbsPage)
+		api.DELETE("/gocrumbs/pages/:id", goCrumbsHandler.DeleteGoCrumbsPage)
 
 		// Access control routes (whitelist/blacklist)
 		api.GET("/whitelist", accessControlHandler.GetWhitelist)
