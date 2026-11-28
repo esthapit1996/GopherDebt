@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+  # Started by ci.yml after it merges a Dependabot PR (a GITHUB_TOKEN merge doesn't trigger push)
+  workflow_dispatch:
 jobs:
   deploy:
     name: Deploy app

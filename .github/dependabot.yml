@@ -1,4 +1,7 @@
 version: 2
+# Each ecosystem bumps in one grouped PR a week, so PRs never conflict over go.mod/go.sum.
+# ci.yml merges Go module PRs by itself when they pass and are only patch bumps, or minor bumps of
+# golang.org/x/* (v0.x modules, where every release counts as minor).
 updates:
   - package-ecosystem: gomod
     directory: /
@@ -6,6 +9,10 @@ updates:
       interval: weekly
     commit-message:
       prefix: "deps"
+    groups:
+      go-modules:
+        patterns:
+          - "*"
 
   - package-ecosystem: github-actions
     directory: /
@@ -13,6 +20,10 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: docker
     directory: /
@@ -20,3 +31,7 @@ updates:
       interval: weekly
     commit-message:
       prefix: "build"
+    groups:
+      docker:
+        patterns:
+          - "*"

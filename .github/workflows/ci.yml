@@ -1,0 +1,101 @@
+name: CI
+
+# Tests every pull request, so nothing reaches main (and Fly) without passing vet, tests and build.
+# The Postgres service runs the database integration tests in db/ as well.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gopherdebt_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The db tests wipe this database; they refuse any name that doesn't end in _test
+      GOPHERDEBT_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/gopherdebt_test?sslmode=disable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -count=1 ./...
+
+      - name: Build
+        run: go build -o /dev/null .
+
+  # Dependabot Go module PRs merge themselves once the tests pass, when they only hold patch bumps
+  # or minor bumps of golang.org/x/* (Go team modules on v0.x, where every release counts as minor).
+  # Everything else (other minor/major bumps, Actions, Docker) waits for a review.
+  automerge:
+    needs: test
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # merge
+      pull-requests: write # merge
+      actions: write # start the deploy
+    steps:
+      - name: Read Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v3
+
+      - name: Decide
+        id: decide
+        run: |
+          merge=false
+          case "$ECOSYSTEM" in
+            gomod|go_modules)
+              if [ "$UPDATE_TYPE" = "version-update:semver-patch" ]; then
+                merge=true
+              elif [ "$UPDATE_TYPE" = "version-update:semver-minor" ]; then
+                merge=true
+                for dep in $(echo "$DEPS" | tr ',' ' '); do
+                  case "$dep" in golang.org/x/*) ;; *) merge=false ;; esac
+                done
+              fi
+              ;;
+          esac
+          echo "ecosystem=$ECOSYSTEM update=$UPDATE_TYPE deps=$DEPS -> merge=$merge"
+          echo "merge=$merge" >> "$GITHUB_OUTPUT"
+        env:
+          ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          DEPS: ${{ steps.meta.outputs.dependency-names }}
+
+      # A merge made with GITHUB_TOKEN doesn't trigger push workflows, so the deploy is started here
+      - name: Merge and deploy
+        if: steps.decide.outputs.merge == 'true'
+        run: |
+          gh pr merge "$PR_URL" --merge --delete-branch
+          gh workflow run fly-deploy.yml --ref main
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}

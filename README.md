@@ -444,10 +444,24 @@ createdb gopherdebt_test
 GOPHERDEBT_TEST_DATABASE_URL='postgres://localhost/gopherdebt_test?sslmode=disable' go test ./db
 ```
 
+CI (`.github/workflows/ci.yml`) runs `go vet`, all tests (with a Postgres 17 service, so the `db/` tests run too) and `go build` on every pull request to `main`.
+
 ## Deployment
 
 Deployed on **Fly.io** with a multi-stage Docker build. Database hosted on **Supabase** (PostgreSQL).
 
+Merging to `main` deploys automatically (`.github/workflows/fly-deploy.yml`); it can also be started by hand from the Actions tab, or with:
+
 ```bash
 fly deploy
 ```
+
+### Dependency updates
+
+Dependabot (`.github/dependabot.yml`) checks weekly and opens one grouped PR per ecosystem: Go modules, GitHub Actions and the Docker base images.
+
+A Go modules PR merges itself once CI passes, and CI then starts the Fly deploy, when it only holds:
+- patch bumps, or
+- minor bumps of `golang.org/x/*`. These Go team modules are on v0.x, so every release counts as minor.
+
+Everything else waits for a review: other minor and major bumps, Actions and Docker. A merge made with `GITHUB_TOKEN` doesn't trigger push workflows, so the Release workflow doesn't run for these merges.
