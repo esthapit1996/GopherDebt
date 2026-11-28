@@ -9,7 +9,7 @@ A full-featured expense sharing and personal finance backend built with Go, Gin,
 - **Expense Payments** — Partial repayments toward specific expenses
 - **GopherStash** — Personal expense tracker with categories and spending summaries
 - **GoWish** — Wishlist of things to buy (name, why, link, cost), personal or in shared wish groups (separate from debt groups)
-- **GoCrumbs** — Monthly "what's left" calculator: German gross-to-net (Lohnsteuer, Soli, church tax, social insurance; employees and Werkstudenten) minus rent, savings and subscriptions. One saved profile per user, no AI
+- **GoCrumbs** — Monthly "what's left" calculator: German gross-to-net (Lohnsteuer, Soli, church tax, social insurance; employees and Werkstudenten) minus rent, savings and subscriptions. Up to 15 named pages per user and work type (e.g. one per month), no AI
 - **Receipt Scanning** — AI-powered receipt parsing via OpenAI (default model `gpt-6-luna`)
 - **Currency Conversion** — Live exchange rates and historical trend data
 - **Suggestion Box** — Feature suggestions with voting, comments, and status tracking
@@ -191,13 +191,17 @@ Separate from debt groups. Each member has their own section of wishes in the gr
 
 ### GoCrumbs — Monthly Budget Calculator (Protected)
 
-One saved profile per user. The profile stores inputs only; net pay and "left" are recalculated on every request, using the latest supported tax year (shown as `tax_year` in the result).
+Budgets are saved as **pages**: each has a name the user picks (e.g. "January" or "After the raise") and a work type that is fixed when it is created. A user can have up to 15 pages per work type (15 employee, 15 Werkstudent). Pages store inputs only; net pay and "left" are recalculated on every request, using the latest supported tax year (shown as `tax_year` in the result). Another user's page is a `404`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/gocrumbs` | Get my saved profile (`data` is absent until the first save) |
-| PUT | `/api/gocrumbs` | Create or replace my profile (must be calculable) and return it |
+| GET | `/api/gocrumbs/pages` | My pages, both work types, oldest first (`id`, `name`, `work_type`, `updated_at`) |
+| POST | `/api/gocrumbs/pages` | Create a page (`name` + the inputs below; must be calculable). `409` when that work type already has 15 pages or the name is taken |
+| GET | `/api/gocrumbs/pages/:id` | Get one page with all its inputs |
+| PUT | `/api/gocrumbs/pages/:id` | Save or rename a page. Changing `work_type` is a `400`; a name already used in that work type is a `409` |
+| DELETE | `/api/gocrumbs/pages/:id` | Delete a page |
 | POST | `/api/gocrumbs/calculate` | Calculate net pay and what's left for the given inputs, without saving |
+| GET / PUT | `/api/gocrumbs` | **Deprecated**: the old single profile, kept only until the frontend uses pages. Its data was copied once into a page named "My budget" |
 
 ### Access Control (Protected, Founder Only)
 
@@ -319,11 +323,12 @@ Authorization: Bearer <token>
 ```
 Only `name` is required (max 64 chars). `why` (max 128 chars), `link` and `cost` are optional; `link` must be an `http(s)://` URL and `cost` must be > 0 when set.
 
-### Save GoCrumbs Budget
+### Create a GoCrumbs Page
 ```json
-PUT /api/gocrumbs
+POST /api/gocrumbs/pages
 Authorization: Bearer <token>
 {
+  "name": "January",
   "work_type": "fte",
   "gross_amount": 4000,
   "gross_period": "month",
@@ -347,7 +352,7 @@ Authorization: Bearer <token>
   ]
 }
 ```
-`work_type` is `fte` or `werkstudent` and decides which income fields count: an employee earns `gross_amount` (with `side_gross` and `extra_pay`), a Werkstudent earns `ws_hourly_wage` × `ws_hours` (`ws_hours_period` is `month` or `week`; a week counts as 52/12 per month) and has no side income or extra pay. Both sets are stored, so switching `work_type` never overwrites the other one. `gross_period` is `month` or `year`; every other amount is EUR per month. `bundesland` is the two-letter code, `zusatzbeitrag` the health insurer's rate in % (0-10). At most 50 expense lines in total and 20 `extra_pay` lines, names up to 60 characters. `extra_pay` is flat monthly pay on top of the salary (e.g. on-call): taxable and subject to social insurance like salary, or paid out in full when `tax_free` is true. `POST /api/gocrumbs/calculate` takes the same body and returns the breakdown: `gross` (incl. tax-free extras), `extra_taxable`, `extra_free`, `rv`, `av`, `kv`, `pv`, `lohnsteuer`, `soli`, `kirchensteuer`, `net`, `expenses`, `left`, the rates and `notes`.
+`name` is required, 1-40 characters after trimming, and unique per user and work type (ignoring case). `PUT /api/gocrumbs/pages/:id` takes the same body. `work_type` is `fte` or `werkstudent`, can't change after the page is created, and decides which income fields count: an employee earns `gross_amount` (with `side_gross` and `extra_pay`), a Werkstudent earns `ws_hourly_wage` × `ws_hours` (`ws_hours_period` is `month` or `week`; a week counts as 52/12 per month) and has no side income or extra pay. Both sets are stored and must be calculable. `gross_period` is `month` or `year`; every other amount is EUR per month. `bundesland` is the two-letter code, `zusatzbeitrag` the health insurer's rate in % (0-10). At most 50 expense lines in total and 20 `extra_pay` lines, names up to 60 characters. `extra_pay` is flat monthly pay on top of the salary (e.g. on-call): taxable and subject to social insurance like salary, or paid out in full when `tax_free` is true. `POST /api/gocrumbs/calculate` takes the same body and returns the breakdown: `gross` (incl. tax-free extras), `extra_taxable`, `extra_free`, `rv`, `av`, `kv`, `pv`, `lohnsteuer`, `soli`, `kirchensteuer`, `net`, `expenses`, `left`, the rates and `notes`.
 
 ### Scan Receipt
 ```
@@ -378,7 +383,9 @@ Max 14 MB (413 if larger), to keep server memory bounded. JPEG, PNG, WEBP or GIF
 │   ├── stash.go           # GopherStash personal expenses
 │   ├── wish.go            # GoWish personal wishlist
 │   ├── wish_lists.go      # GoWish shared wish groups
-│   ├── gocrumbs.go        # GoCrumbs budget profile, expense + extra pay lines
+│   ├── gocrumbs.go        # GoCrumbs single profile (deprecated), expense + extra pay lines
+│   ├── gocrumbs_pages.go  # GoCrumbs pages (15 per work type) + one-time copy of the old profiles
+│   ├── gocrumbs_pages_test.go # GoCrumbs pages against a real Postgres (opt-in, see Testing)
 │   ├── access_control.go  # Email whitelist/blacklist
 │   └── retry.go           # Generic retry with backoff for transient DB errors
 ├── handlers/
@@ -395,7 +402,8 @@ Max 14 MB (413 if larger), to keep server memory bounded. JPEG, PNG, WEBP or GIF
 │   ├── wish_lookup.go     # Product link → name/price (shop data first, OpenAI fallback, SSRF-safe)
 │   ├── ai_guard.go        # AI guardrails: daily per-user limits, token usage log, lookup cache
 │   ├── wish_lists.go      # GoWish shared group endpoints
-│   ├── gocrumbs.go        # GoCrumbs endpoints (profile + calculate)
+│   ├── gocrumbs.go        # GoCrumbs endpoints (calculate + deprecated single profile)
+│   ├── gocrumbs_pages.go  # GoCrumbs page endpoints
 │   ├── access_control.go  # Whitelist/blacklist (founder only)
 │   ├── receipt.go         # AI receipt scanning via OpenAI
 │   ├── handlers_test.go   # Handler tests
@@ -403,6 +411,7 @@ Max 14 MB (413 if larger), to keep server memory bounded. JPEG, PNG, WEBP or GIF
 │   ├── wish_test.go       # GoWish tests
 │   ├── wish_lists_test.go # GoWish shared group tests
 │   ├── gocrumbs_test.go   # GoCrumbs validation + calculate endpoint tests
+│   ├── gocrumbs_pages_test.go # GoCrumbs page validation
 │   └── receipt_test.go    # Receipt scan limits + OpenAI request/errors (fake server)
 ├── gocrumbs/              # GoCrumbs engine: German gross-to-net, pure functions (see gocrumbs/gocrumbs_readme.md)
 │   ├── params.go          # Tax-year constants (2026)
@@ -427,6 +436,13 @@ go test ./...
 ```
 
 Over 100 tests covering authentication, group operations, expense validation, GopherStash, GoWish (personal + shared) and GoCrumbs validation, the GoCrumbs tax engine (checked against the BMF's official reference tables) and middleware.
+
+The GoCrumbs page tests in `db/` need a real PostgreSQL and are skipped without one. They **wipe** the database they get, so they only run against a database whose name ends in `_test`:
+
+```bash
+createdb gopherdebt_test
+GOPHERDEBT_TEST_DATABASE_URL='postgres://localhost/gopherdebt_test?sslmode=disable' go test ./db
+```
 
 ## Deployment
 

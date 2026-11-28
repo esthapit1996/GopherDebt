@@ -14,6 +14,7 @@ var appTables = []string{
 	"expense_payments", "activity_log", "suggestions", "suggestion_votes", "suggestion_comments",
 	"email_whitelist", "email_blacklist", "stash_expenses", "wish_items", "wish_lists", "wish_list_members",
 	"ai_usage", "gocrumbs_profiles", "gocrumbs_expenses", "gocrumbs_extra_pay",
+	"gocrumbs_pages", "gocrumbs_page_expenses", "gocrumbs_page_extra_pay", "migration_flags",
 }
 
 // Supabase's auto-generated REST API (PostgREST) runs as these roles

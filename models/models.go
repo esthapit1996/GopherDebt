@@ -320,6 +320,30 @@ type GoCrumbsProfile struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// GoCrumbsPageRequest creates or saves a GoCrumbs page: a named budget with the profile's inputs.
+// The name is chosen by the user; a page's work type can't change after it is created.
+type GoCrumbsPageRequest struct {
+	Name string `json:"name" binding:"required,max=40"`
+	GoCrumbsRequest
+}
+
+// GoCrumbsPage is a saved GoCrumbs page
+type GoCrumbsPage struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	GoCrumbsRequest
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// GoCrumbsPageSummary is one entry of the page list (one tab)
+type GoCrumbsPageSummary struct {
+	ID        int       `json:"id"`
+	Name      string    `json:"name"`
+	WorkType  string    `json:"work_type"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // APIResponse is a standard API response wrapper
 type APIResponse struct {
 	Success bool        `json:"success"`

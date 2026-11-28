@@ -40,14 +40,15 @@ GopherDebt/
 │   ├── stash.go         # GopherStash personal expenses
 │   ├── wish.go          # GoWish personal wishlist
 │   ├── wish_lists.go    # GoWish shared wish groups
-│   ├── gocrumbs.go      # GoCrumbs budget profile, expense + extra pay lines
+│   ├── gocrumbs.go      # GoCrumbs single profile (deprecated), expense + extra pay lines
+│   ├── gocrumbs_pages.go # GoCrumbs pages (15 per work type) + one-time copy of old profiles
 │   ├── access_control.go # Email whitelist/blacklist
 │   ├── retry.go         # Generic retry with backoff
 │   ├── migrations.go    # Schema creation
 │   └── security.go      # Supabase REST API lockdown, unique emails
 ├── handlers/            # HTTP endpoint controllers
 │   ├── handlers_readme.md   # 📖 Documentation
-│   ├── handlers_test.go # Handler tests (+ stash_test.go, wish_test.go, wish_lists_test.go, gocrumbs_test.go)
+│   ├── handlers_test.go # Handler tests (+ stash_test.go, wish_test.go, wish_lists_test.go, gocrumbs_test.go, gocrumbs_pages_test.go)
 │   ├── users.go         # Auth & profile endpoints
 │   ├── groups.go        # Group endpoints
 │   ├── expenses.go      # Expense endpoints
@@ -61,7 +62,8 @@ GopherDebt/
 │   ├── wish_lookup.go   # Product link lookup for wishes (SSRF-safe fetch, OpenAI fallback)
 │   ├── ai_guard.go      # AI guardrails (daily limits, usage log, cache)
 │   ├── wish_lists.go    # GoWish shared group endpoints
-│   ├── gocrumbs.go      # GoCrumbs endpoints (profile + calculate)
+│   ├── gocrumbs.go      # GoCrumbs endpoints (calculate + deprecated single profile)
+│   ├── gocrumbs_pages.go # GoCrumbs page endpoints
 │   ├── access_control.go # Whitelist/blacklist (founder only)
 │   └── receipt.go       # AI receipt scanning (OpenAI, key server-side)
 ├── gocrumbs/            # GoCrumbs engine (pure functions, no DB or HTTP)
@@ -258,6 +260,23 @@ Starts listening for HTTP requests.
 │ ws_hours_period   │   Werkstudent income has its own
 │ updated_at        │   columns, apart from the gross
 └───────────────────┘   fields of an employee
+
+Deprecated: the three tables above hold the old single profile. Their data was copied once into
+the page tables below (flag in migration_flags) and the page code never writes them.
+
+┌───────────────────┐   ┌────────────────────────┐   ┌─────────────────────────┐
+│ gocrumbs_pages    │   │ gocrumbs_page_expenses │   │ gocrumbs_page_extra_pay │
+├───────────────────┤   ├────────────────────────┤   ├─────────────────────────┤
+│ id (PK)           │   │ id (PK)                │   │ id (PK)                 │
+│ user_id (FK)      │   │ page_id (FK, cascade)  │   │ page_id (FK, cascade)   │
+│ name              │   │ kind                   │   │ name                    │
+│ work_type (fixed) │   │ name                   │   │ amount                  │
+│ ...same inputs as │   │ amount                 │   │ tax_free                │
+│ gocrumbs_profiles │   │ category               │   │ position                │
+│ created_at        │   │ position               │   └─────────────────────────┘
+│ updated_at        │   └────────────────────────┘
+└───────────────────┘   Up to 15 pages per user and work type;
+                        name unique per user + work type (ignoring case)
 ```
 
 ---

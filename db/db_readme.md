@@ -27,7 +27,8 @@ This folder contains all database operations for GopherDebt. Each file handles C
 | `stash.go` | GopherStash personal expense tracking |
 | `wish.go` | GoWish personal wishlist |
 | `wish_lists.go` | GoWish shared wish groups |
-| `gocrumbs.go` | GoCrumbs budget profile, expense lines and extra pay lines |
+| `gocrumbs.go` | GoCrumbs single budget profile (deprecated, replaced by pages), expense lines and extra pay lines |
+| `gocrumbs_pages.go` | GoCrumbs pages (named budgets, 15 per work type) and the one-time copy of the old profiles into pages |
 | `access_control.go` | Email whitelist/blacklist management |
 | `retry.go` | Generic retry with backoff for transient DB errors |
 | `migrations.go` | Database schema creation and updates |
@@ -167,7 +168,7 @@ For each expense_payment:
 
 | Function | Parameters | Returns | Description |
 |----------|------------|---------|-------------|
-| `RunMigrations` | `db *sql.DB` | `error` | Creates all tables and indexes if they don't exist, then runs `lockDownPublicAPI` and `ensureUniqueEmailIgnoringCase` |
+| `RunMigrations` | `db *sql.DB` | `error` | Creates all tables and indexes if they don't exist, runs `copyGoCrumbsProfilesToPages`, then `lockDownPublicAPI` and `ensureUniqueEmailIgnoringCase` |
 
 ### Tables Created
 
@@ -192,6 +193,10 @@ For each expense_payment:
 | `gocrumbs_profiles` | One GoCrumbs budget profile per user (inputs only: work type, gross, tax class, church tax, Bundesland, children, Zusatzbeitrag, rent, savings, and the Werkstudent's `ws_hourly_wage`, `ws_hours`, `ws_hours_period`). Employee and Werkstudent income have separate columns, so switching work type overwrites neither. The `ws_*` columns are added with `ADD COLUMN IF NOT EXISTS`. CHECK constraints mirror the API's ranges |
 | `gocrumbs_expenses` | A profile's named monthly expense lines (`kind` = `subscription` or `custom`, with `position`) |
 | `gocrumbs_extra_pay` | A profile's flat monthly extra pay lines, e.g. on-call (`name`, `amount`, `tax_free`, with `position`) |
+| `gocrumbs_pages` | GoCrumbs pages: `name` (user-chosen, max 40, unique per user and work type ignoring case via `idx_gocrumbs_pages_name`), a fixed `work_type`, the same input columns as `gocrumbs_profiles`, `created_at`, `updated_at` |
+| `gocrumbs_page_expenses` | A page's expense lines (like `gocrumbs_expenses`, keyed by `page_id`, deleted with the page) |
+| `gocrumbs_page_extra_pay` | A page's extra pay lines (like `gocrumbs_extra_pay`, keyed by `page_id`, deleted with the page) |
+| `migration_flags` | One row per one-time data migration that has run, so it never runs twice |
 | `email_whitelist` | Approved registration emails |
 | `email_blacklist` | Blocked registration emails |
 
@@ -295,6 +300,36 @@ All personal functions only touch wishes with `list_id IS NULL`.
 | `SaveGoCrumbsProfile` | `db *sql.DB, userID int, req *models.GoCrumbsRequest` | `*models.GoCrumbsProfile, error` | Creates or replaces the profile, its expense lines and its extra pay lines in one transaction and returns the saved profile |
 
 `SaveGoCrumbsProfile` upserts the profile row first, which holds the row lock until commit, so two parallel saves by one user run one after the other and can't duplicate lines. `MaxGoCrumbsLines` (50) caps subscriptions plus custom lines and `MaxGoCrumbsExtraPayLines` (20) caps extra pay lines; the handler enforces both.
+
+These single-profile functions and tables are deprecated: they only serve `/api/gocrumbs` until the frontend uses pages. Their data is copied once into pages and never written by the page code.
+
+---
+
+## 🔧 gocrumbs_pages.go
+
+### Variables
+
+| Name | Value | Description |
+|------|-------|-------------|
+| `MaxGoCrumbsPages` | `15` | Most pages per user and work type |
+| `ErrGoCrumbsPageLimit` | `error` | The user already has 15 pages of that work type |
+| `ErrGoCrumbsWorkTypeLocked` | `error` | A save would change the page's work type |
+
+### Functions
+
+| Function | Parameters | Returns | Description |
+|----------|------------|---------|-------------|
+| `ListGoCrumbsPages` | `db *sql.DB, userID int` | `[]models.GoCrumbsPageSummary, error` | The user's pages, both work types, oldest first (empty list, never nil) |
+| `GetGoCrumbsPage` | `db *sql.DB, userID, pageID int` | `*models.GoCrumbsPage, error` | One page with its lines; `ErrNotFound` if it doesn't exist or belongs to someone else |
+| `CreateGoCrumbsPage` | `db *sql.DB, userID int, req *models.GoCrumbsPageRequest` | `*models.GoCrumbsPage, error` | Creates a page and its lines; `ErrGoCrumbsPageLimit` at 15 of that work type, `ErrDuplicate` for a taken name |
+| `UpdateGoCrumbsPage` | `db *sql.DB, userID, pageID int, req *models.GoCrumbsPageRequest` | `*models.GoCrumbsPage, error` | Replaces name, inputs and lines; `ErrNotFound`, `ErrDuplicate`, `ErrGoCrumbsWorkTypeLocked` |
+| `DeleteGoCrumbsPage` | `db *sql.DB, userID, pageID int` | `error` | Deletes the page (its lines cascade); `ErrNotFound` |
+| `copyGoCrumbsProfilesToPages` | `db *sql.DB` | `error` | Called by `RunMigrations`: copies every old profile with its lines into a page named "My budget", once |
+
+- **Limit:** `CreateGoCrumbsPage` locks the user's row (`FOR NO KEY UPDATE`) before counting, so parallel creates are counted one after the other and can't pass 15.
+- **Parallel saves:** `UpdateGoCrumbsPage` locks the page row first, so two saves of one page run one after the other and can't duplicate lines.
+- **One-time copy:** the flag `gocrumbs_profiles_copied_to_pages` is inserted into `migration_flags` in the same transaction as the copy. A rerun, or a second machine booting at the same time (it waits on the flag's primary key), copies nothing, and deleting every page later doesn't bring "My budget" back. The old tables are only read.
+- **Tests:** `gocrumbs_pages_test.go` runs against a real PostgreSQL given in `GOPHERDEBT_TEST_DATABASE_URL` (skipped without it). It wipes that database, so it refuses any database whose name doesn't end in `_test`.
 
 ---
 

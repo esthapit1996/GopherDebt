@@ -47,7 +47,14 @@ func bindGoCrumbs(c *gin.Context) (*models.GoCrumbsRequest, bool) {
 		})
 		return nil, false
 	}
+	if !cleanGoCrumbs(c, &req) {
+		return nil, false
+	}
+	return &req, true
+}
 
+// cleanGoCrumbs trims names, fills defaults and checks what binding tags can't, writing a 400 on failure
+func cleanGoCrumbs(c *gin.Context, req *models.GoCrumbsRequest) bool {
 	for _, lines := range [][]models.GoCrumbsExpenseLine{req.Subscriptions, req.CustomExpenses} {
 		for i := range lines {
 			lines[i].Name = strings.TrimSpace(lines[i].Name)
@@ -57,7 +64,7 @@ func bindGoCrumbs(c *gin.Context) (*models.GoCrumbsRequest, bool) {
 					Success: false,
 					Error:   "Expense name is required",
 				})
-				return nil, false
+				return false
 			}
 		}
 	}
@@ -69,7 +76,7 @@ func bindGoCrumbs(c *gin.Context) (*models.GoCrumbsRequest, bool) {
 			Success: false,
 			Error:   "Invalid request: a week has at most 168 hours",
 		})
-		return nil, false
+		return false
 	}
 	for i := range req.ExtraPay {
 		req.ExtraPay[i].Name = strings.TrimSpace(req.ExtraPay[i].Name)
@@ -78,7 +85,7 @@ func bindGoCrumbs(c *gin.Context) (*models.GoCrumbsRequest, bool) {
 				Success: false,
 				Error:   "Extra pay name is required",
 			})
-			return nil, false
+			return false
 		}
 	}
 	if len(req.ExtraPay) > db.MaxGoCrumbsExtraPayLines {
@@ -86,16 +93,16 @@ func bindGoCrumbs(c *gin.Context) (*models.GoCrumbsRequest, bool) {
 			Success: false,
 			Error:   "Too many extra pay lines",
 		})
-		return nil, false
+		return false
 	}
 	if len(req.Subscriptions)+len(req.CustomExpenses) > db.MaxGoCrumbsLines {
 		c.JSON(http.StatusBadRequest, models.APIResponse{
 			Success: false,
 			Error:   "Too many expense lines",
 		})
-		return nil, false
+		return false
 	}
-	return &req, true
+	return true
 }
 
 // maxWeeklyHours is the hours in a week; a month is capped at 744 (31 days) by the model

@@ -34,10 +34,11 @@ Handlers are the **HTTP endpoint controllers**. They receive requests from the f
 | `wish_lookup.go` | Product link → name/price for the Add wish form | `/api/wish/lookup` |
 | `ai_guard.go` | AI guardrails shared by receipts and wish lookups | — |
 | `wish_lists.go` | GoWish shared wish groups | `/api/wish-lists/*` |
-| `gocrumbs.go` | GoCrumbs budget calculator (uses package `gocrumbs`) | `/api/gocrumbs`, `/api/gocrumbs/calculate` |
+| `gocrumbs.go` | GoCrumbs budget calculator (uses package `gocrumbs`) | `/api/gocrumbs/calculate`, `/api/gocrumbs` (deprecated) |
+| `gocrumbs_pages.go` | GoCrumbs pages: named budgets, 15 per work type | `/api/gocrumbs/pages` |
 | `access_control.go` | Email whitelist/blacklist | `/api/whitelist/*`, `/api/blacklist/*` |
 | `receipt.go` | AI receipt scanning | `/api/receipt/scan` |
-| `handlers_test.go`, `stash_test.go`, `wish_test.go`, `wish_lists_test.go`, `gocrumbs_test.go`, `receipt_test.go` | Handler tests | — |
+| `handlers_test.go`, `stash_test.go`, `wish_test.go`, `wish_lists_test.go`, `gocrumbs_test.go`, `gocrumbs_pages_test.go`, `receipt_test.go` | Handler tests | — |
 
 ---
 
@@ -400,17 +401,34 @@ type GoCrumbsHandler struct {
 
 | Method | Endpoint | Function | Description |
 |--------|----------|----------|-------------|
-| GET | `/api/gocrumbs` | `GetGoCrumbs` | The user's saved profile; a first-time user gets `success: true` without `data` (not a 404) |
-| PUT | `/api/gocrumbs` | `SaveGoCrumbs` | Validates, checks that the profile is calculable, then saves it (profile, expense lines and extra pay lines) and returns it |
+| GET | `/api/gocrumbs` | `GetGoCrumbs` | **Deprecated** (replaced by pages): the old single profile; a first-time user gets `success: true` without `data` (not a 404) |
+| PUT | `/api/gocrumbs` | `SaveGoCrumbs` | **Deprecated** (replaced by pages): validates, checks that the profile is calculable, then saves the old single profile |
 | POST | `/api/gocrumbs/calculate` | `CalculateGoCrumbs` | Stateless: same body as PUT, returns the breakdown, never touches the database |
 
 ### How it works
 
-- `bindGoCrumbs` binds the body (ranges are in `models.GoCrumbsRequest`), trims expense and extra pay names and rejects blank ones, and caps expense lines at 50 in total and extra pay lines at 20.
+- `bindGoCrumbs` binds the body (ranges are in `models.GoCrumbsRequest`) and `cleanGoCrumbs` trims expense and extra pay names and rejects blank ones, and caps expense lines at 50 in total and extra pay lines at 20.
 - `goCrumbsInput` converts the profile to the engine's input and only uses the fields of the chosen work type: an employee's gross (yearly becomes monthly), side income and extra pay, or a Werkstudent's hourly wage × hours (weekly hours × 52/12). The other type's fields are ignored, not rejected, because they stay stored. `bindGoCrumbs` defaults `ws_hours_period` to `month` and caps weekly hours at 168. `calculateGoCrumbs` runs `gocrumbs.Calculate`; engine validation failures (`ErrInvalidInput`) become a `400`.
 - PUT calculates before saving, so every saved profile can be shown again. Calculate and PUT also check that the other work type's stored fields are calculable (e.g. an employee gross above the engine's range on a Werkstudent profile is a `400`), so switching work type later never fails.
 - The tax year is the latest one the engine supports that is not after the current year (`goCrumbsTaxYear`). It is returned as `tax_year` so the UI can say which year was used.
 - The database stores inputs only; results are never stored, so a tax-year update corrects everyone's numbers.
+
+---
+
+## 🔧 gocrumbs_pages.go
+
+Named GoCrumbs budgets (e.g. one per month). Methods on `GoCrumbsHandler`.
+
+| Method | Endpoint | Function | Description |
+|--------|----------|----------|-------------|
+| GET | `/api/gocrumbs/pages` | `ListGoCrumbsPages` | The user's pages, both work types, oldest first (`id`, `name`, `work_type`, `updated_at`) |
+| POST | `/api/gocrumbs/pages` | `CreateGoCrumbsPage` | Validates, checks the page is calculable, creates it; `201` with the page |
+| GET | `/api/gocrumbs/pages/:id` | `GetGoCrumbsPage` | One full page |
+| PUT | `/api/gocrumbs/pages/:id` | `UpdateGoCrumbsPage` | Validates, checks the page is calculable, replaces name, inputs and lines |
+| DELETE | `/api/gocrumbs/pages/:id` | `DeleteGoCrumbsPage` | Deletes the page and its lines |
+
+- `bindGoCrumbsPage` binds `models.GoCrumbsPageRequest` (the profile fields plus `name`), trims the name and rejects a blank one, then runs the same `cleanGoCrumbs` and `calculateGoCrumbs` checks as a profile.
+- `goCrumbsPageFail` maps the db errors: `ErrNotFound` → `404` (also for another user's page, so IDs can't be probed), `ErrDuplicate` (name taken in that work type) and `ErrGoCrumbsPageLimit` (15 pages of that work type) → `409`, `ErrGoCrumbsWorkTypeLocked` → `400`.
 
 ---
 

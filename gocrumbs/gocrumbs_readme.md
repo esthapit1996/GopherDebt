@@ -2,7 +2,7 @@
 
 Pure Go package that turns a German **brutto** salary into **netto** and shows what is left after monthly expenses. No I/O, no database, no HTTP, no AI: only integer maths. It imports nothing from the rest of the app.
 
-Served by `handlers/gocrumbs.go` (`/api/gocrumbs`) and saved by `db/gocrumbs.go`.
+Served by `handlers/gocrumbs.go` (`/api/gocrumbs/calculate`) and `handlers/gocrumbs_pages.go` (`/api/gocrumbs/pages`); pages are saved by `db/gocrumbs_pages.go`.
 
 > Estimates, not tax advice. Lohnsteuer is the **payslip withholding** (what the employer deducts), not the final Einkommensteuer.
 
